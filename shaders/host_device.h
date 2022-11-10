@@ -261,7 +261,7 @@ struct PuncLight // point, spot, or directional light.
 };
 
 struct TrigLight { // triangles of emissive meshes
-	vec3 intensity;
+	uint matIndex;
 	vec3 vert0;
 	vec3 vert1;
 	vec3 vert2;
