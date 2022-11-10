@@ -2,4 +2,8 @@
 /build/*
 /bin_x64/*
 /downloaded_resources/*
+<<<<<<< Updated upstream
+=======
+/nvpro_core/*
+>>>>>>> Stashed changes
 /nvpro_core

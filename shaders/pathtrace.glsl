@@ -190,13 +190,44 @@ VisibilityContribution DirectLight(in Ray r, in State state)
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
+vec3 SampleTriangleUniform(vec3 v0, vec3 v1, vec3 v2)
+{
+  float ru = rand(prd.seed);
+  float rv = rand(prd.seed);
+  float r = sqrt(rv);
+  float u = 1.0 - r;
+  float v = ru * r;
+  return v1 * u + v2 * v + v0 * (1.0 - u - v);
+}
+
+float TriangleArea(vec3 v0, vec3 v1, vec3 v2)
+{
+  return length(cross(v1 - v0, v2 - v0)) * 0.5;
+}
+
 vec4 SampleTriangleLight(vec3 x, inout vec3 radiance, out float dist)
 {
   if (lightBufInfo.trigLightSize == 0)
     return vec4(-1.0);
 
-  int id = min(int((lightBufInfo.trigLightSize - 1) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
-  return vec4(-1.0);
+  uint id = min(uint((lightBufInfo.trigLightSize - 1) * rand(prd.seed)), uint(lightBufInfo.trigLightSize) - 1);
+  
+  if (rand(prd.seed) > trigLights[id].impSamp.q)
+    id = trigLights[id].impSamp.alias;
+
+  TrigLight light = trigLights[id];
+  vec4 dirAndPdf;
+
+  vec3 normal = cross(light.vert1 - light.vert0, light.vert2 - light.vert0);
+  float area = length(normal) * 0.5;
+  normal = normalize(normal);
+
+  vec3 y = SampleTriangleUniform(light.vert0, light.vert1, light.vert2);
+  dirAndPdf.xyz = normalize(y - x);
+  dirAndPdf.w = light.impSamp.pdf / area * dot(y - x, y - x) / abs(dot(dirAndPdf.xyz, normal));
+
+  radiance = materials[light.matIndex].emissiveFactor / area;
+  return dirAndPdf;
 }
 
 vec4 SamplePuncLight(vec3 x, inout vec3 radiance, out float dist)
@@ -204,8 +235,18 @@ vec4 SamplePuncLight(vec3 x, inout vec3 radiance, out float dist)
   if (lightBufInfo.puncLightSize == 0)
     return vec4(-1.0);
 
-  int id = min(int((lightBufInfo.puncLightSize - 1) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
-  return vec4(-1.0);
+  uint id = min(uint((lightBufInfo.puncLightSize - 1) * rand(prd.seed)), uint(lightBufInfo.puncLightSize) - 1);
+
+  if (rand(prd.seed) > puncLights[id].impSamp.q)
+    id = puncLights[id].impSamp.alias;
+
+  PuncLight light = puncLights[id];
+  vec4 dirAndPdf;
+  dirAndPdf.xyz = normalize(light.position - x);
+  dirAndPdf.w = light.impSamp.pdf;
+  radiance = light.color * light.intensity;
+
+  return dirAndPdf;
 }
 
 vec3 DirectSample(Ray r)
@@ -249,11 +290,17 @@ vec3 DirectSample(Ray r)
   else
   {
     if (rand(prd.seed) < lightBufInfo.trigSampProb)
+    {
       // Sample triangle mesh light
       dirAndPdf = SampleTriangleLight(state.position, Li, dist);
+      dirAndPdf.w *= lightBufInfo.trigSampProb;
+    }
     else
+    {
       // Sample point light
       dirAndPdf = SamplePuncLight(state.position, Li, dist);
+      dirAndPdf.w *= (1.0 - lightBufInfo.trigSampProb);
+    }
 
     dirAndPdf.w *= (1.0 - rtxState.environmentProb);
   }
