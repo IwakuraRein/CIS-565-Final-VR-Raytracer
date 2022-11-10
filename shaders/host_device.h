@@ -77,9 +77,10 @@ eMaterials = 1,
 eInstData = 2,
 ePuncLights = 3,
 eTrigLights = 4,
-eLightBufInfo = 5,
-eGbuffer = 6,
-eTextures = 7  // must be last elem            
+eTrigLightTransforms = 5,
+eLightBufInfo = 6,
+eGbuffer = 7,
+eTextures = 8  // must be last elem            
 END_ENUM();
 
 // Environment - Set 3
@@ -262,6 +263,7 @@ struct PuncLight // point, spot, or directional light.
 
 struct TrigLight { // triangles of emissive meshes
 	uint matIndex;
+	uint transformIndex;
 	vec3 vert0;
 	vec3 vert1;
 	vec3 vert2;
@@ -269,6 +271,7 @@ struct TrigLight { // triangles of emissive meshes
 	vec2 uv1;
 	vec2 uv2;
 	ImptSampData impSamp;
+	vec3 pad;
 };
 
 struct LightBufInfo {

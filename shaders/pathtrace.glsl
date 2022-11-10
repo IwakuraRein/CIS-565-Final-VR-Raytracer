@@ -218,24 +218,27 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   TrigLight light = trigLights[id];
   vec4 dirAndPdf;
 
-  //vec3 v0 = prd.objectToWorld * vec4(light.vert0, 1.0);
-  //vec3 v1 = prd.objectToWorld * vec4(light.vert1, 1.0);
-  //vec3 v2 = prd.objectToWorld * vec4(light.vert2, 1.0);
-  vec3 v0 = light.vert0;
-  vec3 v1 = light.vert1;
-  vec3 v2 = light.vert2;
+  vec4 tmp0 = (trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
+  vec4 tmp1 = (trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
+  vec4 tmp2 = (trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+  vec3 v0 = tmp0.xyz/* / (tmp0.w)*/;
+  vec3 v1 = tmp1.xyz/* / (tmp1.w)*/;
+  vec3 v2 = tmp2.xyz/* / (tmp2.w)*/;
+  // vec3 v0 = light.vert0;
+  // vec3 v1 = light.vert1;
+  // vec3 v2 = light.vert2;
 
   vec3 normal = cross(v1 - v0, v2 - v0);
   float area = length(normal) * 0.5;
   normal = normalize(normal);
 
   vec2 baryCoord = SampleTriangleUniform(v0, v1, v2);
-  vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1*baryCoord.x-baryCoord.y)*v2;
+  vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1-baryCoord.x-baryCoord.y)*v2;
 
   GltfShadeMaterial mat = materials[light.matIndex];
   vec3 emission = mat.emissiveFactor;
   if (mat.emissiveTexture > -1) {
-    vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1*baryCoord.x-baryCoord.y)*light.uv2;
+    vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1-baryCoord.x-baryCoord.y)*light.uv2;
     emission *=
         SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
   }

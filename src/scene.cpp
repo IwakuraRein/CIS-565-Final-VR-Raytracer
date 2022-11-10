@@ -368,17 +368,22 @@ void Scene::createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel)
 {
 	std::vector<TrigLight> trigLights;
+	std::vector<nvmath::mat4f> transforms;
 
-	for (auto& primMesh : gltf.m_primMeshes)
+	uint i = 0;
+	for (const auto& node : gltf.m_nodes)
 	{
+		const auto& primMesh = gltf.m_primMeshes[node.primMesh];
 		nvh::GltfMaterial mtl = gltf.m_materials[primMesh.materialIndex];
 		if (luminance(mtl.emissiveFactor) > 1e-2f) {
+			transforms.push_back(nvmath::transpose(node.worldMatrix)); // nvmath is row-major
 			for (uint32_t i = primMesh.firstIndex; i < primMesh.firstIndex + primMesh.indexCount - 1; i += 3) {
 				TrigLight trig;
 				VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[i]];
 				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[i + 1]];
 				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[i + 2]];
 
+				trig.transformIndex = i;
 				trig.matIndex = primMesh.materialIndex;
 				trig.vert0 = vert0.position;
 				trig.uv0 = vert0.texcoord;
@@ -389,6 +394,7 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 
 				trigLights.push_back(trig);
 			}
+			i++;
 		}
 	}
 	m_trigLightWeight = createTrigLightImptSampAccel(trigLights, gltf, gltfModel);
@@ -396,9 +402,12 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	m_lightBufInfo.trigLightSize = trigLights.size();
 	if (trigLights.empty()) {  // Cannot be null
 		trigLights.emplace_back(TrigLight{});
+		transforms.emplace_back(nvmath::mat4f{});
 	}
 	m_buffer[eTrigLights] = m_pAlloc->createBuffer(cmdBuf, trigLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	NAME_VK(m_buffer[eTrigLights].buffer);
+	m_buffer[eTrigLightTransforms] = m_pAlloc->createBuffer(cmdBuf, transforms, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	NAME_VK(m_buffer[eTrigLightTransforms].buffer);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -671,13 +680,14 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 
 	nvvk::DescriptorSetBindings bind;
 	bind.addBinding({ SceneBindings::eCamera, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
-	bind.addBinding({ SceneBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eMaterials, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eTextures, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nbTextures, flag });
 	bind.addBinding({ SceneBindings::eInstData, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::ePuncLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eTrigLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	bind.addBinding({ SceneBindings::eTrigLightTransforms, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eLightBufInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
+	bind.addBinding({ SceneBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 
 	m_descPool = bind.createPool(m_device, 1);
 	CREATE_NAMED_VK(m_descSetLayout, bind.createLayout(m_device));
@@ -695,12 +705,13 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 
 	std::vector<VkWriteDescriptorSet> writes;
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eCamera, &dbi[eCameraMat]));
-	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eMaterials, &dbi[eMaterial]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eInstData, &dbi[eInstData]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::ePuncLights, &dbi[ePuncLights]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLights, &dbi[eTrigLights]));
+	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
+	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));
 
 	// Writing the information
