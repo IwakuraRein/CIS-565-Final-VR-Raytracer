@@ -236,7 +236,7 @@ const int LightType_Triangle = 3;
 // acceleration structure for importance sampling - pre-computed
 struct ImptSampData
 {
-	uint  alias;
+	int  alias;
 	float q;
 	float pdf;
 	float aliasPdf;
@@ -261,16 +261,14 @@ struct PuncLight // point, spot, or directional light.
 };
 
 struct TrigLight { // triangles of emissive meshes
+	vec3 intensity;
 	vec3 vert0;
 	vec3 vert1;
 	vec3 vert2;
 	vec2 uv0;
 	vec2 uv1;
 	vec2 uv2;
-	uint matIndex;
-	// 16
 	ImptSampData impSamp;
-	// 20
 };
 
 struct LightBufInfo {

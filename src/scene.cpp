@@ -372,21 +372,20 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	for (auto& primMesh : gltf.m_primMeshes)
 	{
 		nvh::GltfMaterial mtl = gltf.m_materials[primMesh.materialIndex];
-		if (mtl.emissiveFactor.x > 0 ||
-			mtl.emissiveFactor.y > 0 ||
-			mtl.emissiveFactor.z > 0) {
+		if (luminance(mtl.emissiveFactor) > 1e-2f) {
 			for (uint32_t i = primMesh.firstIndex; i < primMesh.firstIndex + primMesh.indexCount - 1; i += 3) {
 				TrigLight trig;
 				VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[i]];
 				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[i + 1]];
 				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[i + 2]];
+
 				trig.vert0 = vert0.position;
 				trig.uv0 = vert0.texcoord;
 				trig.vert1 = vert1.position;
 				trig.uv1 = vert1.texcoord;
 				trig.vert2 = vert2.position;
 				trig.uv2 = vert2.texcoord;
-				trig.matIndex = primMesh.materialIndex;
+				trig.intensity = luminance(mtl.emissiveFactor);
 
 				trigLights.push_back(trig);
 			}
@@ -756,8 +755,7 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 	std::vector<float> distrib;
 	distrib.reserve(trigLights.size());
 	for (auto& trig : trigLights) {
-		nvh::GltfMaterial mtl = gltf.m_materials[trig.matIndex];
-		float power = computeTrigIntensity(trig, mtl, gltfModel);
+		float power = luminance(trig.intensity);
 		distrib.push_back(power);
 		total_weight += power;
 	}
