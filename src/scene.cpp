@@ -382,8 +382,6 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[i + 2]];
 				trig.vert0 = vert0.position;
 				trig.uv0 = vert0.texcoord;
-				trig.vert1 = vert0.position;
-				trig.uv2 = vert0.texcoord;
 				trig.vert1 = vert1.position;
 				trig.uv1 = vert1.texcoord;
 				trig.vert2 = vert2.position;

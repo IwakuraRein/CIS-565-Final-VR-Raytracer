@@ -97,7 +97,6 @@ void main()
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * (rtxState.directSamples+rtxState.indirectSamples));
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
-  // get indirect color
   vec3 pixelColor = vec3(0);
   
   // TODO: cache first intersection into Gbuffer

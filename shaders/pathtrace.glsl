@@ -251,8 +251,7 @@ vec4 SamplePuncLight(vec3 x, inout vec3 radiance, out float dist)
 
 vec3 DirectSample(Ray r)
 {
-  // TODO: importance sampling on light sources
-  // use buffer: lightBufInfo, puncLights, trigLights, and RtxState.environmentProb
+  // TODO: write to gbuffer
   ClosestHit(r);
   if (prd.hitT == INFINITY)
     return vec3(0.0);
@@ -316,7 +315,7 @@ vec3 DirectSample(Ray r)
 
   float dummyPdf;
   return Li * Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, dummyPdf) *
-    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w;
+    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w + state.mat.emission;
 }
 
 vec3 IndirectSample(Ray r)
