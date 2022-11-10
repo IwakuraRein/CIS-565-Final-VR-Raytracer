@@ -703,6 +703,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eInstData, &dbi[eInstData]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::ePuncLights, &dbi[ePuncLights]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLights, &dbi[eTrigLights]));
+	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));
 
 	// Writing the information

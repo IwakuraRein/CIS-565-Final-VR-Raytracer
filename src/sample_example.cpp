@@ -506,6 +506,7 @@ void SampleExample::onFileDrop(const char* filename)
 //
 void SampleExample::onMouseMotion(int x, int y)
 {
+	if (m_busy) return;
 	AppBaseVk::onMouseMotion(x, y);
 
 	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard)
