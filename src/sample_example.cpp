@@ -18,16 +18,15 @@
  */
 
 
-/*
- * Main class to render the scene, holds sub-classes for various work
- */
+ /*
+  * Main class to render the scene, holds sub-classes for various work
+  */
 
 
 #define VMA_IMPLEMENTATION
 
 #include "shaders/host_device.h"
 #include "rayquery.hpp"
-#include "rtx_pipeline.hpp"
 #include "sample_example.hpp"
 #include "sample_gui.hpp"
 #include "tools.hpp"
@@ -44,39 +43,35 @@ NvmlMonitor g_nvml(100, 100);
 // Keep the handle on the device
 // Initialize the tool to do all our allocations: buffers, images
 //
-void SampleExample::setup(const VkInstance&               instance,
-                          const VkDevice&                 device,
-                          const VkPhysicalDevice&         physicalDevice,
-                          const std::vector<nvvk::Queue>& queues)
+void SampleExample::setup(const VkInstance& instance,
+	const VkDevice& device,
+	const VkPhysicalDevice& physicalDevice,
+	const std::vector<nvvk::Queue>& queues)
 {
-  AppBaseVk::setup(instance, device, physicalDevice, queues[eGCT0].familyIndex);
+	AppBaseVk::setup(instance, device, physicalDevice, queues[eGCT0].familyIndex);
 
-  m_gui = std::make_shared<SampleGUI>(this);  // GUI of this class
+	m_gui = std::make_shared<SampleGUI>(this);  // GUI of this class
 
-  // Memory allocator for buffers and images
-  m_alloc.init(instance, device, physicalDevice);
+	// Memory allocator for buffers and images
+	m_alloc.init(instance, device, physicalDevice);
 
-  m_debug.setup(m_device);
+	m_debug.setup(m_device);
 
-  // Compute queues can be use for acceleration structures
-  m_picker.setup(m_device, physicalDevice, queues[eCompute].familyIndex, &m_alloc);
-  m_accelStruct.setup(m_device, physicalDevice, queues[eCompute].familyIndex, &m_alloc);
+	// Compute queues can be use for acceleration structures
+	m_picker.setup(m_device, physicalDevice, queues[eCompute].familyIndex, &m_alloc);
+	m_accelStruct.setup(m_device, physicalDevice, queues[eCompute].familyIndex, &m_alloc);
 
-  // Note: the GTC family queue is used because the nvvk::cmdGenerateMipmaps uses vkCmdBlitImage and this
-  // command requires graphic queue and not only transfer.
-  m_scene.setup(m_device, physicalDevice, queues[eGCT1], &m_alloc);
+	// Note: the GTC family queue is used because the nvvk::cmdGenerateMipmaps uses vkCmdBlitImage and this
+	// command requires graphic queue and not only transfer.
+	m_scene.setup(m_device, physicalDevice, queues[eGCT1], &m_alloc);
 
-  // Transfer queues can be use for the creation of the following assets
-  m_offscreen.setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
-  m_skydome.setup(device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
+	// Transfer queues can be use for the creation of the following assets
+	m_offscreen.setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
+	m_skydome.setup(device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
 
-  // Create and setup all renderers
-  m_pRender[eRtxPipeline] = new RtxPipeline;
-  m_pRender[eRayQuery]    = new RayQuery;
-  for(auto r : m_pRender)
-  {
-    r->setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
-  }
+	// Create and setup all renderers
+	m_pRender.reset(new RayQuery);
+	m_pRender->setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
 }
 
 
@@ -86,12 +81,12 @@ void SampleExample::setup(const VkInstance&               instance,
 //
 void SampleExample::loadScene(const std::string& filename)
 {
-  m_scene.load(filename);
-  m_accelStruct.create(m_scene.getScene(), m_scene.getBuffers(Scene::eVertex), m_scene.getBuffers(Scene::eIndex));
+	m_scene.load(filename);
+	m_accelStruct.create(m_scene.getScene(), m_scene.getBuffers(Scene::eVertex), m_scene.getBuffers(Scene::eIndex));
 
-  // The picker is the helper to return information from a ray hit under the mouse cursor
-  m_picker.setTlas(m_accelStruct.getTlas());
-  resetFrame();
+	// The picker is the helper to return information from a ray hit under the mouse cursor
+	m_picker.setTlas(m_accelStruct.getTlas());
+	resetFrame();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -99,12 +94,12 @@ void SampleExample::loadScene(const std::string& filename)
 //
 void SampleExample::loadEnvironmentHdr(const std::string& hdrFilename)
 {
-  MilliTimer timer;
-  LOGI("Loading HDR and converting %s\n", hdrFilename.c_str());
-  m_skydome.loadEnvironment(hdrFilename);
-  timer.print();
+	MilliTimer timer;
+	LOGI("Loading HDR and converting %s\n", hdrFilename.c_str());
+	m_skydome.loadEnvironment(hdrFilename);
+	timer.print();
 
-  m_rtxState.fireflyClampThreshold = m_skydome.getIntegral() * 4.f;  // magic
+	m_rtxState.fireflyClampThreshold = m_skydome.getIntegral() * 4.f;  // magic
 }
 
 
@@ -115,43 +110,47 @@ void SampleExample::loadEnvironmentHdr(const std::string& hdrFilename)
 //
 void SampleExample::loadAssets(const char* filename)
 {
-  std::string sfile = filename;
+	std::string sfile = filename;
 
-  // Need to stop current rendering
-  m_busy = true;
-  vkDeviceWaitIdle(m_device);
+	// Need to stop current rendering
+	m_busy = true;
+	vkDeviceWaitIdle(m_device);
 
-  std::thread([&, sfile]() {
-    LOGI("Loading: %s\n", sfile.c_str());
+	std::thread([&, sfile]() {
+		LOGI("Loading: %s\n", sfile.c_str());
 
-    // Supporting only GLTF and HDR files
-    namespace fs          = std::filesystem;
-    std::string extension = fs::path(sfile).extension().string();
-    if(extension == ".gltf" || extension == ".glb")
-    {
-      m_busyReasonText = "Loading scene ";
+		// Supporting only GLTF and HDR files
+		namespace fs = std::filesystem;
+		std::string extension = fs::path(sfile).extension().string();
+		if (extension == ".gltf" || extension == ".glb")
+		{
+			m_busyReasonText = "Loading scene ";
 
-      // Loading scene and creating acceleration structure
-      loadScene(sfile);
-      // Loading the scene might have loaded new textures, which is changing the number of elements
-      // in the DescriptorSetLayout. Therefore, the PipelineLayout will be out-of-date and need
-      // to be re-created. If they are re-created, the pipeline also need to be re-created.
-      m_pRender[m_rndMethod]->create(
-          m_size, {m_accelStruct.getDescLayout(), m_offscreen.getDescLayout(), m_scene.getDescLayout(), m_descSetLayout}, &m_scene);
-    }
+			// Loading scene and creating acceleration structure
+			loadScene(sfile);
+			// Loading the scene might have loaded new textures, which is changing the number of elements
+			// in the DescriptorSetLayout. Therefore, the PipelineLayout will be out-of-date and need
+			// to be re-created. If they are re-created, the pipeline also need to be re-created.
+			if (m_pRender) {
+				vkDeviceWaitIdle(m_device);
+				m_pRender->destroy();
+			}
+			m_pRender->create(
+				m_size, { m_accelStruct.getDescLayout(), m_offscreen.getDescLayout(), m_scene.getDescLayout(), m_descSetLayout }, &m_scene);
+		}
 
-    if(extension == ".hdr")  //|| extension == ".exr")
-    {
-      m_busyReasonText = "Loading HDR ";
-      loadEnvironmentHdr(sfile);
-      updateHdrDescriptors();
-    }
+		if (extension == ".hdr")  //|| extension == ".exr")
+		{
+			m_busyReasonText = "Loading HDR ";
+			loadEnvironmentHdr(sfile);
+			updateHdrDescriptors();
+		}
 
 
-    // Re-starting the frame count to 0
-    SampleExample::resetFrame();
-    m_busy = false;
-  }).detach();
+		// Re-starting the frame count to 0
+		SampleExample::resetFrame();
+		m_busy = false;
+		}).detach();
 }
 
 
@@ -160,14 +159,14 @@ void SampleExample::loadAssets(const char* filename)
 //
 void SampleExample::updateUniformBuffer(const VkCommandBuffer& cmdBuf)
 {
-  if(m_busy)
-    return;
+	if (m_busy)
+		return;
 
-  LABEL_SCOPE_VK(cmdBuf);
-  const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
+	LABEL_SCOPE_VK(cmdBuf);
+	const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
 
-  m_scene.updateCamera(cmdBuf, aspectRatio);
-  vkCmdUpdateBuffer(cmdBuf, m_sunAndSkyBuffer.buffer, 0, sizeof(SunAndSky), &m_sunAndSky);
+	m_scene.updateCamera(cmdBuf, aspectRatio);
+	vkCmdUpdateBuffer(cmdBuf, m_sunAndSkyBuffer.buffer, 0, sizeof(SunAndSky), &m_sunAndSky);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -175,20 +174,20 @@ void SampleExample::updateUniformBuffer(const VkCommandBuffer& cmdBuf)
 //
 void SampleExample::updateFrame()
 {
-  static nvmath::mat4f refCamMatrix;
-  static float         fov = 0;
+	static nvmath::mat4f refCamMatrix;
+	static float         fov = 0;
 
-  auto& m = CameraManip.getMatrix();
-  auto  f = CameraManip.getFov();
-  if(memcmp(&refCamMatrix.a00, &m.a00, sizeof(nvmath::mat4f)) != 0 || f != fov)
-  {
-    resetFrame();
-    refCamMatrix = m;
-    fov          = f;
-  }
+	auto& m = CameraManip.getMatrix();
+	auto  f = CameraManip.getFov();
+	if (memcmp(&refCamMatrix.a00, &m.a00, sizeof(nvmath::mat4f)) != 0 || f != fov)
+	{
+		resetFrame();
+		refCamMatrix = m;
+		fov = f;
+	}
 
-  if(m_rtxState.frame < m_maxFrames)
-    m_rtxState.frame++;
+	if (m_rtxState.frame < m_maxFrames)
+		m_rtxState.frame++;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -196,7 +195,7 @@ void SampleExample::updateFrame()
 //
 void SampleExample::resetFrame()
 {
-  m_rtxState.frame = -1;
+	m_rtxState.frame = -1;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -204,28 +203,28 @@ void SampleExample::resetFrame()
 //
 void SampleExample::createDescriptorSetLayout()
 {
-  VkShaderStageFlags flags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
-                             | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	VkShaderStageFlags flags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
+		| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 
-  m_bind.addBinding({EnvBindings::eSunSky, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_MISS_BIT_KHR | flags});
-  m_bind.addBinding({EnvBindings::eHdr, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, flags});  // HDR image
-  m_bind.addBinding({EnvBindings::eImpSamples, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flags});   // importance sampling
+	m_bind.addBinding({ EnvBindings::eSunSky, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_MISS_BIT_KHR | flags });
+	m_bind.addBinding({ EnvBindings::eHdr, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, flags });  // HDR image
+	m_bind.addBinding({ EnvBindings::eImpSamples, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flags });   // importance sampling
 
 
-  m_descPool = m_bind.createPool(m_device, 1);
-  CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
-  CREATE_NAMED_VK(m_descSet, nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
+	m_descPool = m_bind.createPool(m_device, 1);
+	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
+	CREATE_NAMED_VK(m_descSet, nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 
-  // Using the environment
-  std::vector<VkWriteDescriptorSet> writes;
-  VkDescriptorBufferInfo            sunskyDesc{m_sunAndSkyBuffer.buffer, 0, VK_WHOLE_SIZE};
-  VkDescriptorBufferInfo            accelImpSmpl{m_skydome.m_accelImpSmpl.buffer, 0, VK_WHOLE_SIZE};
-  writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eSunSky, &sunskyDesc));
-  writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eHdr, &m_skydome.m_texHdr.descriptor));
-  writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eImpSamples, &accelImpSmpl));
+	// Using the environment
+	std::vector<VkWriteDescriptorSet> writes;
+	VkDescriptorBufferInfo            sunskyDesc{ m_sunAndSkyBuffer.buffer, 0, VK_WHOLE_SIZE };
+	VkDescriptorBufferInfo            accelImpSmpl{ m_skydome.m_accelImpSmpl.buffer, 0, VK_WHOLE_SIZE };
+	writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eSunSky, &sunskyDesc));
+	writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eHdr, &m_skydome.m_texHdr.descriptor));
+	writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eImpSamples, &accelImpSmpl));
 
-  vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -233,12 +232,12 @@ void SampleExample::createDescriptorSetLayout()
 //
 void SampleExample::updateHdrDescriptors()
 {
-  std::vector<VkWriteDescriptorSet> writes;
-  VkDescriptorBufferInfo            accelImpSmpl{m_skydome.m_accelImpSmpl.buffer, 0, VK_WHOLE_SIZE};
+	std::vector<VkWriteDescriptorSet> writes;
+	VkDescriptorBufferInfo            accelImpSmpl{ m_skydome.m_accelImpSmpl.buffer, 0, VK_WHOLE_SIZE };
 
-  writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eHdr, &m_skydome.m_texHdr.descriptor));
-  writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eImpSamples, &accelImpSmpl));
-  vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eHdr, &m_skydome.m_texHdr.descriptor));
+	writes.emplace_back(m_bind.makeWrite(m_descSet, EnvBindings::eImpSamples, &accelImpSmpl));
+	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -247,9 +246,9 @@ void SampleExample::updateHdrDescriptors()
 //
 void SampleExample::createUniformBuffer()
 {
-  m_sunAndSkyBuffer = m_alloc.createBuffer(sizeof(SunAndSky), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  NAME_VK(m_sunAndSkyBuffer.buffer);
+	m_sunAndSkyBuffer = m_alloc.createBuffer(sizeof(SunAndSky), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	NAME_VK(m_sunAndSkyBuffer.buffer);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -257,30 +256,26 @@ void SampleExample::createUniformBuffer()
 //
 void SampleExample::destroyResources()
 {
-  // Resources
-  m_alloc.destroy(m_sunAndSkyBuffer);
+	// Resources
+	m_alloc.destroy(m_sunAndSkyBuffer);
 
-  // Descriptors
-  vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
-  vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
+	// Descriptors
+	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
+	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
-  // Other
-  m_picker.destroy();
-  m_scene.destroy();
-  m_accelStruct.destroy();
-  m_offscreen.destroy();
-  m_skydome.destroy();
-  m_axis.deinit();
+	// Other
+	m_picker.destroy();
+	m_scene.destroy();
+	m_accelStruct.destroy();
+	m_offscreen.destroy();
+	m_skydome.destroy();
+	m_axis.deinit();
 
-  // All renderers
-  for(auto p : m_pRender)
-  {
-    p->destroy();
-    p = nullptr;
-  }
+	m_pRender->destroy();
+	m_pRender = nullptr;
 
-  // Memory
-  m_alloc.deinit();
+	// Memory
+	m_alloc.deinit();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -288,8 +283,8 @@ void SampleExample::destroyResources()
 //
 void SampleExample::onResize(int /*w*/, int /*h*/)
 {
-  m_offscreen.update(m_size);
-  resetFrame();
+	m_offscreen.update(m_size);
+	resetFrame();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -297,36 +292,30 @@ void SampleExample::onResize(int /*w*/, int /*h*/)
 //
 void SampleExample::renderGui(nvvk::ProfilerVK& profiler)
 {
-  m_gui->titleBar();
-  m_gui->menuBar();
-  m_gui->render(profiler);
+	m_gui->titleBar();
+	m_gui->menuBar();
+	m_gui->render(profiler);
 
-  auto& IO = ImGui::GetIO();
-  if(ImGui::IsMouseDoubleClicked(ImGuiDir_Left) && !ImGui::GetIO().WantCaptureKeyboard)
-  {
-    screenPicking();
-  }
+	auto& IO = ImGui::GetIO();
+	if (ImGui::IsMouseDoubleClicked(ImGuiDir_Left) && !ImGui::GetIO().WantCaptureKeyboard)
+	{
+		screenPicking();
+	}
 }
 
 
 //--------------------------------------------------------------------------------------------------
 // Creating the render: RTX, Ray Query, ...
 // - Destroy the previous one.
-void SampleExample::createRender(RndMethod method)
+void SampleExample::createRender()
 {
-  if(method == m_rndMethod)
-    return;
+	if (m_pRender) {
+		vkDeviceWaitIdle(m_device);  // cannot destroy while in use
+		m_pRender->destroy();
+	}
 
-  LOGI("Switching renderer, from %d to %d \n", m_rndMethod, method);
-  if(m_rndMethod != eNone)
-  {
-    vkDeviceWaitIdle(m_device);  // cannot destroy while in use
-    m_pRender[m_rndMethod]->destroy();
-  }
-  m_rndMethod = method;
-
-  m_pRender[m_rndMethod]->create(
-      m_size, {m_accelStruct.getDescLayout(), m_offscreen.getDescLayout(), m_scene.getDescLayout(), m_descSetLayout}, &m_scene);
+	m_pRender->create(
+		m_size, { m_accelStruct.getDescLayout(), m_offscreen.getDescLayout(), m_scene.getDescLayout(), m_descSetLayout }, &m_scene);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -334,9 +323,9 @@ void SampleExample::createRender(RndMethod method)
 // This is the space left in the center view.
 void SampleExample::setRenderRegion(const VkRect2D& size)
 {
-  if(memcmp(&m_renderRegion, &size, sizeof(VkRect2D)) != 0)
-    resetFrame();
-  m_renderRegion = size;
+	if (memcmp(&m_renderRegion, &size, sizeof(VkRect2D)) != 0)
+		resetFrame();
+	m_renderRegion = size;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -345,8 +334,8 @@ void SampleExample::setRenderRegion(const VkRect2D& size)
 
 void SampleExample::createOffscreenRender()
 {
-  m_offscreen.create(m_size, m_renderPass);
-  m_axis.init(m_device, m_renderPass, 0, 50.0f);
+	m_offscreen.create(m_size, m_renderPass);
+	m_axis.init(m_device, m_renderPass, 0, 50.0f);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -354,26 +343,26 @@ void SampleExample::createOffscreenRender()
 // If enabled, draw orientation axis in the lower left corner.
 void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 {
-  LABEL_SCOPE_VK(cmdBuf);
-  auto size = nvmath::vec2f(m_size.width, m_size.height);
-  auto area = nvmath::vec2f(m_renderRegion.extent.width, m_renderRegion.extent.height);
+	LABEL_SCOPE_VK(cmdBuf);
+	auto size = nvmath::vec2f(m_size.width, m_size.height);
+	auto area = nvmath::vec2f(m_renderRegion.extent.width, m_renderRegion.extent.height);
 
-  VkViewport viewport{static_cast<float>(m_renderRegion.offset.x),
-                      static_cast<float>(m_renderRegion.offset.y),
-                      static_cast<float>(m_size.width),
-                      static_cast<float>(m_size.height),
-                      0.0f,
-                      1.0f};
-  VkRect2D   scissor{m_renderRegion.offset, {m_renderRegion.extent.width, m_renderRegion.extent.height}};
-  vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
-  vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
+	VkViewport viewport{ static_cast<float>(m_renderRegion.offset.x),
+						static_cast<float>(m_renderRegion.offset.y),
+						static_cast<float>(m_size.width),
+						static_cast<float>(m_size.height),
+						0.0f,
+						1.0f };
+	VkRect2D   scissor{ m_renderRegion.offset, {m_renderRegion.extent.width, m_renderRegion.extent.height} };
+	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
+	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-  m_offscreen.m_tonemapper.zoom           = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
-  m_offscreen.m_tonemapper.renderingRatio = size / area;
-  m_offscreen.run(cmdBuf);
+	m_offscreen.m_tonemapper.zoom = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
+	m_offscreen.m_tonemapper.renderingRatio = size / area;
+	m_offscreen.run(cmdBuf);
 
-  if(m_showAxis)
-    m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
+	if (m_showAxis)
+		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -383,42 +372,42 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK& profiler)
 {
 #if defined(NVP_SUPPORTS_NVML)
-  g_nvml.refresh();
+	g_nvml.refresh();
 #endif
 
-  if(m_busy)
-  {
-    m_gui->showBusyWindow();  // Busy while loading scene
-    return;
-  }
+	if (m_busy)
+	{
+		m_gui->showBusyWindow();  // Busy while loading scene
+		return;
+	}
 
-  LABEL_SCOPE_VK(cmdBuf);
+	LABEL_SCOPE_VK(cmdBuf);
 
-  auto sec = profiler.timeRecurring("Render", cmdBuf);
+	auto sec = profiler.timeRecurring("Render", cmdBuf);
 
-  // We are done rendering
-  if(m_rtxState.frame >= m_maxFrames)
-    return;
+	// We are done rendering
+	if (m_rtxState.frame >= m_maxFrames)
+		return;
 
-  // Handling de-scaling by reducing the size to render
-  VkExtent2D render_size = m_renderRegion.extent;
-  if(m_descaling)
-    render_size = VkExtent2D{render_size.width / m_descalingLevel, render_size.height / m_descalingLevel};
+	// Handling de-scaling by reducing the size to render
+	VkExtent2D render_size = m_renderRegion.extent;
+	if (m_descaling)
+		render_size = VkExtent2D{ render_size.width / m_descalingLevel, render_size.height / m_descalingLevel };
 
-  m_rtxState.size = {render_size.width, render_size.height};
-  // State is the push constant structure
-  m_pRender[m_rndMethod]->setPushContants(m_rtxState);
-  // Running the renderer
-  m_pRender[m_rndMethod]->run(cmdBuf, render_size, profiler,
-                              {m_accelStruct.getDescSet(), m_offscreen.getDescSet(), m_scene.getDescSet(), m_descSet});
+	m_rtxState.size = { render_size.width, render_size.height };
+	// State is the push constant structure
+	m_pRender->setPushContants(m_rtxState);
+	// Running the renderer
+	m_pRender->run(cmdBuf, render_size, profiler,
+		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(), m_scene.getDescSet(), m_descSet });
 
 
-  // For automatic brightness tonemapping
-  if(m_offscreen.m_tonemapper.autoExposure)
-  {
-    auto slot = profiler.timeRecurring("Mipmap", cmdBuf);
-    m_offscreen.genMipmap(cmdBuf);
-  }
+	// For automatic brightness tonemapping
+	if (m_offscreen.m_tonemapper.autoExposure)
+	{
+		auto slot = profiler.timeRecurring("Mipmap", cmdBuf);
+		m_offscreen.genMipmap(cmdBuf);
+	}
 }
 
 
@@ -434,26 +423,27 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 //
 void SampleExample::onKeyboard(int key, int scancode, int action, int mods)
 {
-  nvvk::AppBaseVk::onKeyboard(key, scancode, action, mods);
+	if (m_busy) return;
+	nvvk::AppBaseVk::onKeyboard(key, scancode, action, mods);
 
-  if(action == GLFW_RELEASE)
-    return;
+	if (action == GLFW_RELEASE)
+		return;
 
-  switch(key)
-  {
-    case GLFW_KEY_HOME:
-    case GLFW_KEY_F:  // Set the camera as to see the model
-      fitCamera(m_scene.getScene().m_dimensions.min, m_scene.getScene().m_dimensions.max, false);
-      break;
-    case GLFW_KEY_SPACE:
-      screenPicking();
-      break;
-    case GLFW_KEY_R:
-      resetFrame();
-      break;
-    default:
-      break;
-  }
+	switch (key)
+	{
+	case GLFW_KEY_HOME:
+	case GLFW_KEY_F:  // Set the camera as to see the model
+		fitCamera(m_scene.getScene().m_dimensions.min, m_scene.getScene().m_dimensions.max, false);
+		break;
+	case GLFW_KEY_SPACE:
+		screenPicking();
+		break;
+	case GLFW_KEY_R:
+		resetFrame();
+		break;
+	default:
+		break;
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -461,45 +451,45 @@ void SampleExample::onKeyboard(int key, int scancode, int action, int mods)
 //
 void SampleExample::screenPicking()
 {
-  double x, y;
-  glfwGetCursorPos(m_window, &x, &y);
+	double x, y;
+	glfwGetCursorPos(m_window, &x, &y);
 
-  // Set the camera as to see the model
-  nvvk::CommandPool sc(m_device, m_graphicsQueueIndex);
-  VkCommandBuffer   cmdBuf = sc.createCommandBuffer();
+	// Set the camera as to see the model
+	nvvk::CommandPool sc(m_device, m_graphicsQueueIndex);
+	VkCommandBuffer   cmdBuf = sc.createCommandBuffer();
 
-  const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
-  const auto& view        = CameraManip.getMatrix();
-  auto        proj        = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, 0.1f, 1000.0f);
+	const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
+	const auto& view = CameraManip.getMatrix();
+	auto        proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, 0.1f, 1000.0f);
 
-  nvvk::RayPickerKHR::PickInfo pickInfo;
-  pickInfo.pickX          = float(x - m_renderRegion.offset.x) / float(m_renderRegion.extent.width);
-  pickInfo.pickY          = float(y - m_renderRegion.offset.y) / float(m_renderRegion.extent.height);
-  pickInfo.modelViewInv   = nvmath::invert(view);
-  pickInfo.perspectiveInv = nvmath::invert(proj);
-
-
-  m_picker.run(cmdBuf, pickInfo);
-  sc.submitAndWait(cmdBuf);
-
-  nvvk::RayPickerKHR::PickResult pr = m_picker.getResult();
-
-  if(pr.instanceID == ~0)
-  {
-    LOGI("Nothing Hit\n");
-    return;
-  }
-
-  nvmath::vec3f worldPos = pr.worldRayOrigin + pr.worldRayDirection * pr.hitT;
-  // Set the interest position
-  nvmath::vec3f eye, center, up;
-  CameraManip.getLookat(eye, center, up);
-  CameraManip.setLookat(eye, worldPos, up, false);
+	nvvk::RayPickerKHR::PickInfo pickInfo;
+	pickInfo.pickX = float(x - m_renderRegion.offset.x) / float(m_renderRegion.extent.width);
+	pickInfo.pickY = float(y - m_renderRegion.offset.y) / float(m_renderRegion.extent.height);
+	pickInfo.modelViewInv = nvmath::invert(view);
+	pickInfo.perspectiveInv = nvmath::invert(proj);
 
 
-  auto& prim = m_scene.getScene().m_primMeshes[pr.instanceCustomIndex];
-  LOGI("Hit(%d): %s\n", pr.instanceCustomIndex, prim.name.c_str());
-  LOGI(" - PrimId(%d)\n", pr.primitiveID);
+	m_picker.run(cmdBuf, pickInfo);
+	sc.submitAndWait(cmdBuf);
+
+	nvvk::RayPickerKHR::PickResult pr = m_picker.getResult();
+
+	if (pr.instanceID == ~0)
+	{
+		LOGI("Nothing Hit\n");
+		return;
+	}
+
+	nvmath::vec3f worldPos = pr.worldRayOrigin + pr.worldRayDirection * pr.hitT;
+	// Set the interest position
+	nvmath::vec3f eye, center, up;
+	CameraManip.getLookat(eye, center, up);
+	CameraManip.setLookat(eye, worldPos, up, false);
+
+
+	auto& prim = m_scene.getScene().m_primMeshes[pr.instanceCustomIndex];
+	LOGI("Hit(%d): %s\n", pr.instanceCustomIndex, prim.name.c_str());
+	LOGI(" - PrimId(%d)\n", pr.primitiveID);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -507,7 +497,7 @@ void SampleExample::screenPicking()
 //
 void SampleExample::onFileDrop(const char* filename)
 {
-  loadAssets(filename);
+	loadAssets(filename);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -516,15 +506,15 @@ void SampleExample::onFileDrop(const char* filename)
 //
 void SampleExample::onMouseMotion(int x, int y)
 {
-  AppBaseVk::onMouseMotion(x, y);
+	AppBaseVk::onMouseMotion(x, y);
 
-  if(ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard)
-    return;
+	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard)
+		return;
 
-  if(m_inputs.lmb || m_inputs.rmb || m_inputs.mmb)
-  {
-    m_descaling = true;
-  }
+	if (m_inputs.lmb || m_inputs.rmb || m_inputs.mmb)
+	{
+		m_descaling = true;
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -532,10 +522,10 @@ void SampleExample::onMouseMotion(int x, int y)
 //
 void SampleExample::onMouseButton(int button, int action, int mods)
 {
-  AppBaseVk::onMouseButton(button, action, mods);
-  if((m_inputs.lmb || m_inputs.rmb || m_inputs.mmb) == false && action == GLFW_RELEASE && m_descaling == true)
-  {
-    m_descaling = false;
-    resetFrame();
-  }
+	AppBaseVk::onMouseButton(button, action, mods);
+	if ((m_inputs.lmb || m_inputs.rmb || m_inputs.mmb) == false && action == GLFW_RELEASE && m_descaling == true)
+	{
+		m_descaling = false;
+		resetFrame();
+	}
 }

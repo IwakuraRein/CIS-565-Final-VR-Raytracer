@@ -54,4 +54,10 @@ std::string FormatNumbers(T value)
   return ss.str();
 }
 
+template<typename T>
+inline float luminance(const T& color)
+{
+	return color[0] * 0.2126f + color[1] * 0.7152f + color[2] * 0.0722f;
+}
+
 #endif

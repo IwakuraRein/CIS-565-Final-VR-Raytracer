@@ -94,16 +94,38 @@ void main()
   // Initialize the seed for the random number only once once
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;
-  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.maxSamples);
+  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * (rtxState.directSamples+rtxState.indirectSamples));
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
-  // Sampling the pixel
+  // get indirect color
   vec3 pixelColor = vec3(0);
-  for(int smpl = 0; smpl < rtxState.maxSamples; ++smpl)
+  
+  // TODO: cache first intersection into Gbuffer
+  for(int smpl = 0; smpl < rtxState.directSamples; ++smpl)
   {
-    pixelColor += samplePixel(imageCoords, ivec2(imageRes));
+    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+    vec3 radiance = DirectSample(ray);
+    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    if(lum > rtxState.fireflyClampThreshold)
+    {
+      radiance *= rtxState.fireflyClampThreshold / lum;
+    }
+    pixelColor += radiance;
   }
-  pixelColor /= rtxState.maxSamples;
+
+  // indirect lighting
+  for(int smpl = 0; smpl < rtxState.indirectSamples; ++smpl)
+  {
+    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+    vec3 radiance = IndirectSample(ray);
+    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    if(lum > rtxState.fireflyClampThreshold)
+    {
+      radiance *= rtxState.fireflyClampThreshold / lum;
+    }
+    pixelColor += radiance;
+  }
+  pixelColor /= (rtxState.directSamples+rtxState.indirectSamples);
 
   // Debug - Heatmap
   if(rtxState.debugging_mode == eHeatmap)

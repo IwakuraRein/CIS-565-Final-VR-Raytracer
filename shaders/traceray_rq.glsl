@@ -102,7 +102,7 @@ bool HitTest(in rayQueryEXT rayQuery, in Ray r)
 }
 
 //-----------------------------------------------------------------------
-// Shoot a ray an return the information of the closest hit, in the
+// Shoot a ray and return the information of the closest hit, in the
 // PtPayload structure (PRD)
 //
 void ClosestHit(Ray r)

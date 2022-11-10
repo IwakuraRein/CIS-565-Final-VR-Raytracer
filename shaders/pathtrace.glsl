@@ -20,7 +20,7 @@
 //-------------------------------------------------------------------------------------------------
 // This file is the main function for the path tracer.
 // * `samplePixel()` is setting a ray from the camera origin through a pixel (jitter)
-// * `PathTrace()` will loop until the ray depth is reached or the environment is hit.
+// * `IndirectSample()` will loop until the ray depth is reached or the environment is hit.
 // * `DirectLight()` is the contribution at the hit, if the shadow ray is not hitting anything.
 
 #define ENVMAP 1
@@ -122,7 +122,7 @@ VisibilityContribution DirectLight(in Ray r, in State state)
 
     // randomly select one of the lights
     int   light_index = int(min(rand(prd.seed) * sceneCamera.nbLights, sceneCamera.nbLights));
-    Light light       = lights[light_index];
+    PuncLight light       = puncLights[light_index];
 
     vec3  pointToLight     = -light.direction;
     float rangeAttenuation = 1.0;
@@ -190,7 +190,89 @@ VisibilityContribution DirectLight(in Ray r, in State state)
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
-vec3 PathTrace(Ray r)
+vec4 SampleTriangleLight(vec3 x, inout vec3 radiance, out float dist)
+{
+  if (lightBufInfo.trigLightSize == 0)
+    return vec4(-1.0);
+
+  int id = min(int((lightBufInfo.trigLightSize - 1) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
+  return vec4(-1.0);
+}
+
+vec4 SamplePuncLight(vec3 x, inout vec3 radiance, out float dist)
+{
+  if (lightBufInfo.puncLightSize == 0)
+    return vec4(-1.0);
+
+  int id = min(int((lightBufInfo.puncLightSize - 1) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
+  return vec4(-1.0);
+}
+
+vec3 DirectSample(Ray r)
+{
+  // TODO: importance sampling on light sources
+  // use buffer: lightBufInfo, puncLights, trigLights, and RtxState.environmentProb
+  ClosestHit(r);
+  if (prd.hitT == INFINITY)
+    return vec3(0.0);
+
+  ShadeState sstate = GetShadeState(prd);
+
+  State state;
+  state.position = sstate.position;
+  state.normal = sstate.normal;
+  state.tangent = sstate.tangent_u[0];
+  state.bitangent = sstate.tangent_v[0];
+  state.texCoord = sstate.text_coords[0];
+  state.matID = sstate.matIndex;
+  state.isEmitter = false;
+  state.specularBounce = false;
+  state.isSubsurface = false;
+  state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+
+  // Filling material structures
+  GetMaterialsAndTextures(state, r);
+
+  // Color at vertices
+  state.mat.albedo *= sstate.color;
+
+  vec4 dirAndPdf;
+  vec3 Li = vec3(0.0);
+  float dist = 1e24;
+
+  if (rand(prd.seed) < rtxState.environmentProb)
+  {
+    // Sample environment
+    dirAndPdf = EnvSample(Li);
+    dirAndPdf.w *= rtxState.environmentProb;
+  }
+  else
+  {
+    if (rand(prd.seed) < lightBufInfo.trigSampProb)
+      // Sample triangle mesh light
+      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
+    else
+      // Sample point light
+      dirAndPdf = SamplePuncLight(state.position, Li, dist);
+
+    dirAndPdf.w *= (1.0 - rtxState.environmentProb);
+  }
+
+  if (dirAndPdf.w <= 0.0)
+    return vec3(0.0);
+
+  Ray shadowRay;
+  shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+  shadowRay.direction = dirAndPdf.xyz;
+  if (AnyHit(shadowRay, dist))
+    return vec3(0.0);
+
+  float dummyPdf;
+  return Li * Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, dummyPdf) *
+    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w;
+}
+
+vec3 IndirectSample(Ray r)
 {
   vec3 radiance   = vec3(0.0);
   vec3 throughput = vec3(1.0);
@@ -274,8 +356,8 @@ vec3 PathTrace(Ray r)
     throughput *= exp(-absorption * prd.hitT);
 
     // Light and environment contribution
-    VisibilityContribution vcontrib = DirectLight(r, state);
-    vcontrib.radiance *= throughput;
+    // VisibilityContribution vcontrib = DirectLight(r, state);
+    // vcontrib.radiance *= throughput;
 
     // Sampling for the next ray
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
@@ -298,9 +380,9 @@ vec3 PathTrace(Ray r)
     // Debugging info
     if(rtxState.debugging_mode != eNoDebug && (depth == rtxState.maxDepth - 1))
     {
-      if(rtxState.debugging_mode == eRadiance)
-        return vcontrib.radiance;
-      else if(rtxState.debugging_mode == eWeight)
+      // if(rtxState.debugging_mode == eRadiance)
+      //   return vcontrib.radiance;
+      /*else*/ if(rtxState.debugging_mode == eWeight)
         return throughput;
       else if(rtxState.debugging_mode == eRayDir)
         return (bsdfSampleRec.L + vec3(1)) * 0.5;
@@ -319,16 +401,16 @@ vec3 PathTrace(Ray r)
 
     // We are adding the contribution to the radiance only if the ray is not occluded by an object.
     // This is done here to minimize live state across ray-trace calls.
-    if(vcontrib.visible == true)
-    {
-      // Shoot shadow ray up to the light (1e32 == environement)
-      Ray  shadowRay = Ray(r.origin, vcontrib.lightDir);
-      bool inShadow  = AnyHit(shadowRay, vcontrib.lightDist);
-      if(!inShadow)
-      {
-        radiance += vcontrib.radiance;
-      }
-    }
+    // if(vcontrib.visible == true)
+    // {
+    //   // Shoot shadow ray up to the light (1e32 == environement)
+    //   Ray  shadowRay = Ray(r.origin, vcontrib.lightDir);
+    //   bool inShadow  = AnyHit(shadowRay, vcontrib.lightDist);
+    //   if(!inShadow)
+    //   {
+    //     radiance += vcontrib.radiance;
+    //   }
+    // }
 
 
 #ifdef RR
@@ -345,10 +427,7 @@ vec3 PathTrace(Ray r)
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
-vec3 samplePixel(ivec2 imageCoords, ivec2 sizeImage)
-{
-  vec3 pixelColor = vec3(0);
-
+Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage){
   // Subpixel jitter: send the ray through a different position inside the pixel each time, to provide antialiasing.
   vec2 subpixel_jitter = rtxState.frame == 0 ? vec2(0.5f, 0.5f) : vec2(rand(prd.seed), rand(prd.seed));
 
@@ -371,17 +450,5 @@ vec3 samplePixel(ivec2 imageCoords, ivec2 sizeImage)
   vec3  randomAperturePos = (cos(cam_r1) * cam_right.xyz + sin(cam_r1) * cam_up.xyz) * sqrt(cam_r2);
   vec3  finalRayDir       = normalize(focalPoint - randomAperturePos);
 
-  Ray ray = Ray(origin.xyz + randomAperturePos, finalRayDir);
-
-
-  vec3 radiance = PathTrace(ray);
-
-  // Removing fireflies
-  float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-  if(lum > rtxState.fireflyClampThreshold)
-  {
-    radiance *= rtxState.fireflyClampThreshold / lum;
-  }
-
-  return radiance;
+  return Ray(origin.xyz + randomAperturePos, finalRayDir);
 }

@@ -20,9 +20,9 @@
 #pragma once
 
 
-//--------------------------------------------------------------------------------------------------
-// - Loading and storing the glTF scene
-// - Creates the buffers and descriptor set for the scene
+ //--------------------------------------------------------------------------------------------------
+ // - Loading and storing the glTF scene
+ // - Creates the buffers and descriptor set for the scene
 
 
 #include <string>
@@ -37,68 +37,84 @@
 class Scene
 {
 public:
-  enum EBuffer
-  {
-    eCameraMat,
-    eMaterial,
-    eInstData,
-    eLights,
-  };
+	enum EBuffer
+	{
+		eCameraMat,
+		eMaterial,
+		eInstData,
+		ePuncLights,
+		eTrigLights,
+		eLightBufInfo,
+		eGbuffer
+	};
 
 
-  enum EBuffers
-  {
-    eVertex,
-    eIndex,
-    eLast_elem
-  };
+	enum EBuffers
+	{
+		eVertex,
+		eIndex,
+	};
 
 public:
-  void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, const nvvk::Queue& queue, nvvk::ResourceAllocator* allocator);
-  bool load(const std::string& filename);
+	void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, const nvvk::Queue& queue, nvvk::ResourceAllocator* allocator);
+	bool load(const std::string& filename);
 
-  void createInstanceDataBuffer(VkCommandBuffer cmdBuf, nvh::GltfScene& gltf);
-  void createVertexBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
-  void setCameraFromScene(const std::string& filename, const nvh::GltfScene& gltf);
-  bool loadGltfScene(const std::string& filename, tinygltf::Model& tmodel);
-  void createLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
-  void createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
-  void destroy();
-  void updateCamera(const VkCommandBuffer& cmdBuf, float aspectRatio);
+	void createInstanceDataBuffer(VkCommandBuffer cmdBuf, nvh::GltfScene& gltf);
+	void createVertexBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
+	void setCameraFromScene(const std::string& filename, const nvh::GltfScene& gltf);
+	bool loadGltfScene(const std::string& filename, tinygltf::Model& tmodel);
+	void createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
+	void createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
+	void createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
+	void destroy();
+	void updateCamera(const VkCommandBuffer& cmdBuf, float aspectRatio);
 
 
-  VkDescriptorSetLayout            getDescLayout() { return m_descSetLayout; }
-  VkDescriptorSet                  getDescSet() { return m_descSet; }
-  nvh::GltfScene&                  getScene() { return m_gltf; }
-  nvh::GltfStats&                  getStat() { return m_stats; }
-  const std::vector<nvvk::Buffer>& getBuffers(EBuffers b) { return m_buffers[b]; }
-  const std::string&               getSceneName() const { return m_sceneName; }
-  SceneCamera&                     getCamera() { return m_camera; }
+	VkDescriptorSetLayout            getDescLayout() { return m_descSetLayout; }
+	VkDescriptorSet                  getDescSet() { return m_descSet; }
+	nvh::GltfScene& getScene() { return m_gltf; }
+	nvh::GltfStats& getStat() { return m_stats; }
+	const std::vector<nvvk::Buffer>& getBuffers(EBuffers b) { return m_buffers[b]; }
+	const std::string& getSceneName() const { return m_sceneName; }
+	SceneCamera& getCamera() { return m_camera; }
 
 private:
-  void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
-  void createDescriptorSet(const nvh::GltfScene& gltf);
+	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
+	void createDescriptorSet(const nvh::GltfScene& gltf);
 
-  nvh::GltfScene m_gltf;
-  nvh::GltfStats m_stats;
+	nvh::GltfScene m_gltf;
+	nvh::GltfStats m_stats;
 
-  std::string m_sceneName;
-  SceneCamera m_camera{};
+	std::string m_sceneName;
+	SceneCamera m_camera{};
 
-  // Setup
-  nvvk::ResourceAllocator* m_pAlloc;  // Allocator for buffer, images, acceleration structures
-  nvvk::DebugUtil          m_debug;   // Utility to name objects
-  VkDevice                 m_device;
-  nvvk::Queue              m_queue;
+	// Setup
+	nvvk::ResourceAllocator* m_pAlloc;  // Allocator for buffer, images, acceleration structures
+	nvvk::DebugUtil          m_debug;   // Utility to name objects
+	VkDevice                 m_device;
+	nvvk::Queue              m_queue;
 
-  // Resources
-  std::array<nvvk::Buffer, 5>                            m_buffer;           // For single buffer
-  std::array<std::vector<nvvk::Buffer>, 2>               m_buffers;          // For array of buffers (vertex/index)
-  std::vector<nvvk::Texture>                             m_textures;         // vector of all textures of the scene
-  std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_images;           // vector of all images of the scene
-  std::vector<size_t>                                    m_defaultTextures;  // for cleanup
+	// Resources
+	std::array<nvvk::Buffer, 7>                            m_buffer;           // For single buffer
+	std::array<std::vector<nvvk::Buffer>, 2>               m_buffers;          // For array of buffers (vertex/index)
+	std::vector<nvvk::Texture>                             m_textures;         // vector of all textures of the scene
+	std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_images;           // vector of all images of the scene
+	std::vector<size_t>                                    m_defaultTextures;  // for cleanup
 
-  VkDescriptorPool      m_descPool{VK_NULL_HANDLE};
-  VkDescriptorSetLayout m_descSetLayout{VK_NULL_HANDLE};
-  VkDescriptorSet       m_descSet{VK_NULL_HANDLE};
+	// to create mesh lights' alias table, we need to temporarily store all mesh info
+	// they will be cleared after loading
+	std::unique_ptr<std::vector<VertexAttributes>>  m_pVertices;
+	std::unique_ptr<std::vector<uint32_t>>          m_pIndices;
+	std::unique_ptr<std::vector<GltfShadeMaterial>> m_pShadeMaterials;
+
+	VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
+	VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
+	VkDescriptorSet       m_descSet{ VK_NULL_HANDLE };
+
+	// Direct light importance sampling
+	LightBufInfo m_lightBufInfo;
+	float m_puncLightWeight{ 0.f }, m_trigLightWeight{ 0.f };
+	float createPuncLightImptSampAccel(std::vector<PuncLight>& puncLights, const nvh::GltfScene& gltf);
+	float createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
+	float computeTrigIntensity(const TrigLight& trig, const nvh::GltfMaterial& mtl, const tinygltf::Model& gltfModel);
 };

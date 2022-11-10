@@ -104,7 +104,7 @@ void HdrSampling::loadEnvironment(const std::string& hrdImage)
 // This will later allow the sampling shader to uniformly select a texel in the environment, and
 // select either that texel or its alias depending on their relative intensities
 //
-float HdrSampling::buildAliasmap(const std::vector<float>& data, std::vector<EnvAccel>& accel)
+float HdrSampling::buildAliasmap(const std::vector<float>& data, std::vector<ImptSampData>& accel)
 {
   auto size = static_cast<uint32_t>(data.size());
 
@@ -175,22 +175,16 @@ float HdrSampling::buildAliasmap(const std::vector<float>& data, std::vector<Env
   return sum;
 }
 
-// CIE luminance
-inline float luminance(const float* color)
-{
-  return color[0] * 0.2126f + color[1] * 0.7152f + color[2] * 0.0722f;
-}
-
 //--------------------------------------------------------------------------------------------------
 // Create acceleration data for importance sampling
 // See:  https://arxiv.org/pdf/1901.05423.pdf
-std::vector<EnvAccel> HdrSampling::createEnvironmentAccel(const float* pixels, VkExtent2D& size)
+std::vector<ImptSampData> HdrSampling::createEnvironmentAccel(const float* pixels, VkExtent2D& size)
 {
   const uint32_t rx = size.width;
   const uint32_t ry = size.height;
 
   // Create importance sampling data
-  std::vector<EnvAccel> envAccel(rx * ry);
+  std::vector<ImptSampData> envAccel(rx * ry);
   std::vector<float>    importanceData(rx * ry);
   float                 cosTheta0 = 1.0f;
   const float           stepPhi   = float(2.0 * M_PI) / float(rx);

@@ -231,7 +231,7 @@ float powerHeuristic(float a, float b)
 //const int numOfLights = 0;
 ////-----------------------------------------------------------------------
 ////-----------------------------------------------------------------------
-//void sampleSphereLight(in Light light, inout LightSampleRec lightSampleRec, in vec2 rand)
+//void sampleSphereLight(in PuncLight light, inout LightSampleRec lightSampleRec, in vec2 rand)
 //{
 //  float r1 = rand.x;
 //  float r2 = rand.y;
@@ -243,7 +243,7 @@ float powerHeuristic(float a, float b)
 //
 ////-----------------------------------------------------------------------
 ////-----------------------------------------------------------------------
-//void sampleRectLight(in Light light, inout LightSampleRec lightSampleRec, in vec2 rand)
+//void sampleRectLight(in PuncLight light, inout LightSampleRec lightSampleRec, in vec2 rand)
 //{
 //  float r1 = rand.x;
 //  float r2 = rand.y;
@@ -255,9 +255,9 @@ float powerHeuristic(float a, float b)
 //
 ////-----------------------------------------------------------------------
 ////-----------------------------------------------------------------------
-//void sampleLight(in Light light, inout LightSampleRec lightSampleRec, in vec2 rand)
+//void sampleLight(in PuncLight light, inout LightSampleRec lightSampleRec, in vec2 rand)
 //{
-//  if(int(light.type) == 0)  // Rect Light
+//  if(int(light.type) == 0)  // Rect PuncLight
 //    sampleRectLight(light, lightSampleRec, rand);
 //  else
 //    sampleSphereLight(light, lightSampleRec, rand);
