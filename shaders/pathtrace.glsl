@@ -210,7 +210,7 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   if (lightBufInfo.trigLightSize == 0)
     return vec4(-1.0);
 
-  int id = min(int((lightBufInfo.trigLightSize - 1) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
+  int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
   
   if (rand(prd.seed) > trigLights[id].impSamp.q)
     id = trigLights[id].impSamp.alias;
@@ -218,30 +218,30 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   TrigLight light = trigLights[id];
   vec4 dirAndPdf;
 
-  vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
-  vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
-  vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
-  //vec3 v0 = light.vert0;
-  //vec3 v1 = light.vert1;
-  //vec3 v2 = light.vert2;
+  //vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
+  //vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
+  //vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+
+  vec3 v0 = light.vert0;
+  vec3 v1 = light.vert1;
+  vec3 v2 = light.vert2;
 
   vec3 normal = cross(v1 - v0, v2 - v0);
   float area = length(normal) * 0.5;
   normal = normalize(normal);
 
   vec2 baryCoord = SampleTriangleUniform(v0, v1, v2);
-  vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1-baryCoord.x-baryCoord.y)*v2;
+  vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1 - baryCoord.x - baryCoord.y) * v2;
 
   GltfShadeMaterial mat = materials[light.matIndex];
   vec3 emission = mat.emissiveFactor;
   if (mat.emissiveTexture > -1) {
-    vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1-baryCoord.x-baryCoord.y)*light.uv2;
+    vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1 - baryCoord.x - baryCoord.y) * light.uv2;
     emission *=
         SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
   }
   dirAndPdf.xyz = normalize(y - x);
-  dirAndPdf.w = light.impSamp.pdf / area * dot(y - x, y - x) / abs(dot(dirAndPdf.xyz, normal));
-  // dirAndPdf.w = 1.0;
+  dirAndPdf.w = light.impSamp.pdf * dot(y - x, y - x) / (area * abs(dot(dirAndPdf.xyz, normal)));
   dist = length(y - x);
   radiance = emission / area;
   // radiance = emission;
@@ -253,7 +253,7 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist)
   if (lightBufInfo.puncLightSize == 0)
     return vec4(-1.0);
 
-  int id = min(int((lightBufInfo.puncLightSize - 1) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
+  int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
 
   if (rand(prd.seed) > puncLights[id].impSamp.q)
     id = puncLights[id].impSamp.alias;
@@ -317,9 +317,8 @@ vec3 DirectSample(Ray r)
   vec4 dirAndPdf;
   vec3 Li = vec3(0.0);
   float dist = 1e24;
-  float lightProb = 1.0 - rtxState.environmentProb;
-  float rnd = rand(prd.seed);
-  if(rnd < rtxState.environmentProb) {
+
+  if(rand(prd.seed) < rtxState.environmentProb) {
     // Sample environment
     dirAndPdf = EnvSample(Li);
     if (dirAndPdf.w <= 0.0)
@@ -328,16 +327,16 @@ vec3 DirectSample(Ray r)
   }
   else
   {
-    if(rnd > lightProb && rnd < (lightProb + lightProb * lightBufInfo.trigSampProb)) {
+    if(rand(prd.seed) < lightBufInfo.trigSampProb) {
       // Sample triangle mesh light
       dirAndPdf = SampleTriangleLight(state.position, Li, dist);
-      dirAndPdf.w *= lightProb * lightBufInfo.trigSampProb;
+      dirAndPdf.w *= lightBufInfo.trigSampProb;
     }
     else
     {
       // Sample point light
       dirAndPdf = SamplePuncLight(state.position, Li, dist);
-      dirAndPdf.w *= lightProb * (1.0 - lightBufInfo.trigSampProb);
+      dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
     }
     if (dirAndPdf.w <= 0.0)
       return state.mat.emission;
@@ -348,7 +347,7 @@ vec3 DirectSample(Ray r)
   Ray shadowRay;
   shadowRay.origin = OffsetRay(state.position, state.ffnormal);
   shadowRay.direction = dirAndPdf.xyz;
-  if (AnyHit(shadowRay, dist))
+  if (AnyHit(shadowRay, dist - 1e-4))
     return state.mat.emission;
 
   float dummyPdf;

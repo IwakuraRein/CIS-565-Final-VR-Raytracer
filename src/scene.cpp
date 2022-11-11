@@ -375,7 +375,9 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	{
 		const auto& primMesh = gltf.m_primMeshes[node.primMesh];
 		nvh::GltfMaterial mtl = gltf.m_materials[primMesh.materialIndex];
+		
 		if (luminance(mtl.emissiveFactor) > 1e-2f) {
+			std::cout << luminance(mtl.emissiveFactor) << " Emissive\n";
 			transforms.push_back(node.worldMatrix); // nvmath is col-major
 			for (uint32_t idx = primMesh.firstIndex; idx < primMesh.firstIndex + primMesh.indexCount - 1; idx += 3) {
 				TrigLight trig;
@@ -391,6 +393,10 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 				trig.uv1 = vert1.texcoord;
 				trig.vert2 = vert2.position;
 				trig.uv2 = vert2.texcoord;
+
+				trig.vert0 = node.worldMatrix * vec4(trig.vert0, 1.0);
+				trig.vert1 = node.worldMatrix * vec4(trig.vert1, 1.0);
+				trig.vert2 = node.worldMatrix * vec4(trig.vert2, 1.0);
 
 				trigLights.push_back(trig);
 			}
@@ -768,6 +774,7 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 	for (auto& trig : trigLights) {
 		nvh::GltfMaterial mtl = gltf.m_materials[trig.matIndex];
 		float power;
+		
 		if (mtl.emissiveTexture > -1) {
 			//TODO
 			power = luminance(mtl.emissiveFactor);
