@@ -44,7 +44,7 @@ layout(set = S_SCENE, binding = eGbuffer,	  scalar)   buffer _Gbuffer	{ GeomData
 layout(set = S_SCENE, binding = eMaterials,	scalar)		buffer _MaterialBuffer	{ GltfShadeMaterial materials[]; };
 layout(set = S_SCENE, binding = ePuncLights,scalar)		buffer _PuncLights		{ PuncLight puncLights[]; };
 layout(set = S_SCENE, binding = eTrigLights,scalar)		buffer _TrigLights		{ TrigLight trigLights[]; };
-layout(set = S_SCENE, binding = eTrigLightTransforms,scalar)  uniform _TrigLightTransforms { mat4 trigLightTransforms[16]; };
+// layout(set = S_SCENE, binding = eTrigLightTransforms,scalar)  uniform _TrigLightTransforms { mat4 trigLightTransforms[16]; };
 layout(set = S_SCENE, binding = eLightBufInfo     )		uniform _LightBufInfo		{ LightBufInfo lightBufInfo; };
 layout(set = S_SCENE, binding = eTextures         )   uniform sampler2D		texturesMap[]; 
 //

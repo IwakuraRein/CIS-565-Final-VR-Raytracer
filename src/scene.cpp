@@ -408,8 +408,8 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	}
 	m_buffer[eTrigLights] = m_pAlloc->createBuffer(cmdBuf, trigLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	NAME_VK(m_buffer[eTrigLights].buffer);
-	m_buffer[eTrigLightTransforms] = m_pAlloc->createBuffer(cmdBuf, transforms, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-	NAME_VK(m_buffer[eTrigLightTransforms].buffer);
+	// m_buffer[eTrigLightTransforms] = m_pAlloc->createBuffer(cmdBuf, transforms, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	// NAME_VK(m_buffer[eTrigLightTransforms].buffer);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -684,7 +684,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	bind.addBinding({ SceneBindings::eInstData, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::ePuncLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eTrigLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
-	bind.addBinding({ SceneBindings::eTrigLightTransforms, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
+	// bind.addBinding({ SceneBindings::eTrigLightTransforms, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eLightBufInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 
@@ -708,7 +708,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eInstData, &dbi[eInstData]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::ePuncLights, &dbi[ePuncLights]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLights, &dbi[eTrigLights]));
-	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
+	// writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));

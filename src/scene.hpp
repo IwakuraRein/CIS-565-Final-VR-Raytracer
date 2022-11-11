@@ -44,7 +44,7 @@ public:
 		eInstData,
 		ePuncLights,
 		eTrigLights,
-		eTrigLightTransforms,
+		// eTrigLightTransforms,
 		eLightBufInfo,
 		eGbuffer
 	};
