@@ -339,6 +339,11 @@ vec3 DirectSample(Ray r)
 
   // Color at vertices
   state.mat.albedo *= sstate.color;
+  
+  if(state.mat.unlit)
+  {
+    return state.mat.albedo;
+  }
 
   if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
     return DebugInfo(state);
@@ -458,12 +463,6 @@ vec3 IndirectSample(Ray r)
     // if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
     //   return vec3(0.0);
 
-    // KHR_materials_unlit
-    if(state.mat.unlit)
-    {
-      return radiance + state.mat.albedo * throughput;
-    }
-
     // Reset absorption when ray is going out of surface
     if(dot(state.normal, state.ffnormal) > 0.0)
     {
@@ -472,6 +471,12 @@ vec3 IndirectSample(Ray r)
 
     // Emissive material
     if (depth != 1) radiance += state.mat.emission * throughput; // ignore direct light
+
+    // KHR_materials_unlit
+    if(state.mat.unlit)
+    {
+      return radiance + state.mat.albedo * throughput;
+    }
 
     // Add absoption (transmission / volume)
     throughput *= exp(-absorption * prd.hitT);
