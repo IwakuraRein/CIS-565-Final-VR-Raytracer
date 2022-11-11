@@ -213,7 +213,7 @@ struct RtxState
 	int   maxHeatmap;
 	float environmentProb;        // Used in direct light importance sampling
 
-	float time;                   // How long has the app been running. Seconds.
+	uint time;                   // How long has the app been running. miliseconds.
 	vec3  pad;
 };
 

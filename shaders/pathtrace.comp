@@ -94,7 +94,8 @@ void main()
   // Initialize the seed for the random number only once once
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;
-  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * (rtxState.directSamples+rtxState.indirectSamples));
+  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * (rtxState.directSamples+rtxState.indirectSamples));
+  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);

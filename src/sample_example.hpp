@@ -69,6 +69,8 @@ typedef nvvk::ResourceAllocatorDedicated Allocator;
 #include "imgui_internal.h"
 #include "queue.hpp"
 
+#include <chrono>
+
 class SampleGUI;
 
 //--------------------------------------------------------------------------------------------------
@@ -191,4 +193,6 @@ public:
 
 
 	std::shared_ptr<SampleGUI> m_gui;
+
+	std::chrono::steady_clock::time_point m_start_time;
 };

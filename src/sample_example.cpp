@@ -86,6 +86,7 @@ void SampleExample::loadScene(const std::string& filename)
 
 	// The picker is the helper to return information from a ray hit under the mouse cursor
 	m_picker.setTlas(m_accelStruct.getTlas());
+	m_start_time = std::chrono::high_resolution_clock::now();
 	resetFrame();
 }
 
@@ -395,6 +396,7 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 		render_size = VkExtent2D{ render_size.width / m_descalingLevel, render_size.height / m_descalingLevel };
 
 	m_rtxState.size = { render_size.width, render_size.height };
+	m_rtxState.time = (uint)(std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - m_start_time).count() * 1000.0);
 	// State is the push constant structure
 	m_pRender->setPushContants(m_rtxState);
 	// Running the renderer
