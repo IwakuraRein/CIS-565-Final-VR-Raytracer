@@ -229,8 +229,8 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist) {
     emission *= SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
   }
   dirAndPdf.xyz = normalize(y - x);
-  dirAndPdf.w = light.impSamp.pdf * dot(y - x, y - x) / (area * abs(dot(dirAndPdf.xyz, normal)));
   dist = length(y - x);
+  dirAndPdf.w = light.impSamp.pdf * dist * dist / (area * abs(dot(dirAndPdf.xyz, normal)));
   radiance = emission / area;
   // radiance = emission;
   return dirAndPdf;
@@ -335,23 +335,23 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
     return DebugInfo(state);
 
   vec4 dirAndPdf;
-  bsdfSampleRec.L = vec3(0.0);
-  float dist = 1e24;
+  vec3 Li = vec3(0.0);
+  float dist = INFINITY;
 
   if(rand(prd.seed) < rtxState.environmentProb) {
     // Sample environment
-    dirAndPdf = EnvSample(bsdfSampleRec.L);
+    dirAndPdf = EnvSample(Li);
     if(dirAndPdf.w <= 0.0)
       return /*state.mat.emission*/ vec3(0.0);
     dirAndPdf.w *= rtxState.environmentProb;
   } else {
     if(rand(prd.seed) < lightBufInfo.trigSampProb) {
       // Sample triangle mesh light
-      dirAndPdf = SampleTriangleLight(state.position, bsdfSampleRec.L, dist);
+      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
       dirAndPdf.w *= lightBufInfo.trigSampProb;
     } else {
       // Sample point light
-      dirAndPdf = SamplePuncLight(state.position, bsdfSampleRec.L, dist);
+      dirAndPdf = SamplePuncLight(state.position, Li, dist);
       dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
     }
     if(dirAndPdf.w <= 0.0)
@@ -361,21 +361,25 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   }
 
   Ray shadowRay;
-  shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+  // shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+  // float offset = length(state.position - shadowRay.origin) + 1e-4;
   shadowRay.direction = dirAndPdf.xyz;
-  if(AnyHit(shadowRay, dist - 1e-4))
-    return /*state.mat.emission*/ vec3(0.0);
+  shadowRay.origin = state.position + shadowRay.direction * 1e-4;
 
-  bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, bsdfSampleRec.pdf);
+  bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
 
   if(rtxState.debugging_mode == eRadiance)
-    return bsdfSampleRec.L / dirAndPdf.w;
+    return Li / dirAndPdf.w;
   else if(rtxState.debugging_mode == eWeight)
     return bsdfSampleRec.f;
   else if(rtxState.debugging_mode == eRayDir)
-    return (-r.direction + vec3(1)) * 0.5;
-  return bsdfSampleRec.L * bsdfSampleRec.f *
-    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
+    return (shadowRay.direction + vec3(1)) * 0.5;
+
+  if(AnyHit(shadowRay, dist - 2e-4))
+    return /*state.mat.emission*/ vec3(0.0);
+  else
+    return Li * bsdfSampleRec.f *
+      max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
 }
 
 vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
@@ -450,6 +454,20 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     // Emissive material
     if(depth != 1)
       radiance += state.mat.emission * throughput; // ignore direct light
+    if(depth > 1) {
+      vec4 dirAndPdf;
+      float dist, dummyPdf;
+      vec3 Li;
+      dirAndPdf = SamplePuncLight(state.position, Li, dist);
+      Ray shadowRay;
+      shadowRay.direction = dirAndPdf.xyz;
+      shadowRay.origin = state.position + shadowRay.direction * 1e-4;
+      if (dirAndPdf.w > 0) {
+      if(!AnyHit(shadowRay, dist - 2e-4))
+        radiance += Li * Eval(state, -r.direction, state.ffnormal, shadowRay.direction, dummyPdf) *
+          max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w * throughput;
+      }
+    }
 
     // KHR_materials_unlit
     if(state.mat.unlit) {
@@ -483,8 +501,8 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
       //   return vcontrib.radiance;
       /*else*/ if(rtxState.debugging_mode == eWeight)
         return throughput;
-      else if(rtxState.debugging_mode == eRayDir)
-        return (bsdfSampleRec.L + vec3(1)) * 0.5;
+      // else if(rtxState.debugging_mode == eRayDir)
+      //   return (r.direction + vec3(1)) * 0.5;
     }
 
 #ifdef RR
