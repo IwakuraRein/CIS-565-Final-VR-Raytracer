@@ -135,6 +135,8 @@ bool SampleGUI::guiRayTracing()
 	changed |= GuiH::Selection("Debug Mode", "Display unique values of material", &rtxState.debugging_mode, nullptr, Normal,
 		{
 			"No Debug",
+			"Direct Light",
+			"Indirect Light",
 			"BaseColor",
 			"Normal",
 			"Metallic",
@@ -159,19 +161,18 @@ bool SampleGUI::guiRayTracing()
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
+	changed |= GuiH::Slider("Sampling Rate",
+		"The samples per pixel",
+		&rtxState.spp, nullptr, Normal, 0, 32);
 	GuiH::Group<bool>("Direct Light", false, [&] {
-		changed |= GuiH::Slider("Sampling Rate",
-			"The samples per pixel of direct light sampling",
-			&rtxState.directSamples, nullptr, Normal, 0, 64);
 		changed |= GuiH::Slider("Environment Weight",
 			"If there is a environment map, the probability it will be used in direct light sampling",
 			&rtxState.environmentProb, nullptr, Normal, 0.f, 1.f);
 		return changed;
 		});
 	GuiH::Group<bool>("Indirect Light", false, [&] {
-		changed |= GuiH::Slider("Sampling Rate",
-			"The samples per pixel of indirect sampling", &rtxState.indirectSamples, nullptr, Normal, 0, 64);
-		return changed;
+		ImGui::Text("Place Holder");
+		return true;
 		});
 	return changed;
 }

@@ -104,10 +104,6 @@ bool Scene::load(const std::string& filename)
 	m_buffer[eLightBufInfo] = m_pAlloc->createBuffer(cmdBuf, sizeof(LightBufInfo), &m_lightBufInfo, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 	NAME_VK(m_buffer[eLightBufInfo].buffer);
 
-	// Create Gbuffer
-	m_buffer[eGbuffer] = m_pAlloc->createBuffer(sizeof(GeomData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	NAME_VK(m_buffer[eGbuffer].buffer);
-
 	// Finalizing the command buffer - upload data to GPU
 	LOGI(" <Finalize>");
 	MilliTimer timer;
@@ -686,7 +682,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	bind.addBinding({ SceneBindings::eTrigLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	// bind.addBinding({ SceneBindings::eTrigLightTransforms, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eLightBufInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
-	bind.addBinding({ SceneBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	//bind.addBinding({ SceneBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 
 	m_descPool = bind.createPool(m_device, 1);
 	CREATE_NAMED_VK(m_descSetLayout, bind.createLayout(m_device));
@@ -710,7 +706,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLights, &dbi[eTrigLights]));
 	// writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
-	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
+	//writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));
 
 	// Writing the information

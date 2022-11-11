@@ -94,40 +94,35 @@ void main()
   // Initialize the seed for the random number only once once
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;
-  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * (rtxState.directSamples+rtxState.indirectSamples));
+  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
   
-  // TODO: cache first intersection into Gbuffer
-  for(int smpl = 0; smpl < rtxState.directSamples; ++smpl)
+  for(int smpl = 0; smpl < rtxState.spp; ++smpl)
   {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-    vec3 radiance = DirectSample(ray);
+    GeomData gData;
+    vec3 radiance = DirectSample(ray, gData);
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold)
     {
       radiance *= rtxState.fireflyClampThreshold / lum;
     }
-    pixelColor += radiance;
-  }
-
-  // indirect lighting
-  if(rtxState.debugging_mode == eNoDebug || rtxState.debugging_mode >= eRadiance) {
-    for(int smpl = 0; smpl < rtxState.indirectSamples; ++smpl)
-    {
-      Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-      vec3 radiance = IndirectSample(ray);
-      float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-      if(lum > rtxState.fireflyClampThreshold)
-      {
-        radiance *= rtxState.fireflyClampThreshold / lum;
-      }
+    if (rtxState.debugging_mode != eIndirectResult)
       pixelColor += radiance;
+
+    radiance = IndirectSample(ray, gData);
+    lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    if(lum > rtxState.fireflyClampThreshold)
+    {
+      radiance *= rtxState.fireflyClampThreshold / lum;
     }
-    pixelColor /= (rtxState.directSamples+rtxState.indirectSamples);
+    if (rtxState.debugging_mode != eDirectResult)
+      pixelColor += radiance;
   }
+  pixelColor /= rtxState.spp;
 
   // Debug - Heatmap
   if(rtxState.debugging_mode == eHeatmap)

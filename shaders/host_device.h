@@ -56,7 +56,8 @@ S_ACCEL = 0,  // Acceleration structure
 S_OUT = 1,  // Offscreen output image
 S_SCENE = 2,  // Scene data
 S_ENV = 3,  // Environment / Sun & Sky
-S_WF = 4   // Wavefront extra data
+S_RAYQ = 4, // Ray query renderer
+S_WF = 5   // Wavefront extra data
 END_ENUM();
 
 // Acceleration Structure - Set 0
@@ -77,10 +78,8 @@ eMaterials = 1,
 eInstData = 2,
 ePuncLights = 3,
 eTrigLights = 4,
-// eTrigLightTransforms = 5,
-eLightBufInfo = 6,
-eGbuffer = 7,
-eTextures = 8  // must be last elem            
+eLightBufInfo = 5,
+eTextures = 6  // must be last elem            
 END_ENUM();
 
 // Environment - Set 3
@@ -90,20 +89,27 @@ eHdr = 1,
 eImpSamples = 2
 END_ENUM();
 
+// Ray Query - Set 4
+START_ENUM(RayQBindings)
+eGbuffer = 0
+END_ENUM();
+
 START_ENUM(DebugMode)
 eNoDebug = 0,   //
-eBaseColor = 1,   //
-eNormal = 2,   //
-eMetallic = 3,   //
-eEmissive = 4,   //
-eAlpha = 5,   //
-eRoughness = 6,   //
-eTexcoord = 7,   //
-eTangent = 8,   //
-eRadiance = 9,   //
-eWeight = 10,  //
-eRayDir = 11,  //
-eHeatmap = 12   //
+eDirectResult = 1, //
+eIndirectResult = 2, //
+eBaseColor = 3,   //
+eNormal = 4,   //
+eMetallic = 5,   //
+eEmissive = 6,   //
+eAlpha = 7,   //
+eRoughness = 8,   //
+eTexcoord = 9,   //
+eTangent = 10,   //
+eRadiance = 11,   //
+eWeight = 12,  //
+eRayDir = 13,  //
+eHeatmap = 14   //
 END_ENUM();
 // clang-format on
 
@@ -191,8 +197,14 @@ struct GltfShadeMaterial
 // Gbuffer
 struct GeomData {
 	vec3 normal;
-	vec2 text_coords;
+	vec3 tangent;
+	vec2 texCoord;
+	//8
 	uint matIndex;
+	vec3 position;
+	//12
+	vec3 color; //vertex color
+	float pad;
 };
 
 // Use with PushConstant
@@ -200,21 +212,18 @@ struct RtxState
 {
 	int   frame;                  // Current frame, start at 0
 	int   maxDepth;               // How deep the path is
-	int   directSamples;
-	int   indirectSamples;
-
+	int   spp;
 	float fireflyClampThreshold;  // to cut fireflies
+
 	float hdrMultiplier;          // To brightening the scene
 	int   debugging_mode;         // See DebugMode
 	int   pbrMode;                // 0-Disney, 1-Gltf
+	float environmentProb;        // Used in direct light importance sampling
 
 	ivec2 size;                   // rendering size
 	int   minHeatmap;             // Debug mode - heat map
 	int   maxHeatmap;
-	float environmentProb;        // Used in direct light importance sampling
-
 	uint time;                   // How long has the app been running. miliseconds.
-	vec3  pad;
 };
 
 // Structure used for retrieving the primitive information in the closest hit
