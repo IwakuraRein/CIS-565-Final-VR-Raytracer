@@ -103,8 +103,9 @@ void main()
   for(int smpl = 0; smpl < rtxState.spp; ++smpl)
   {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-    GeomData gData;
-    vec3 radiance = DirectSample(ray, gData);
+    State state;
+    BsdfSampleRec bsdfSampleRec;
+    vec3 radiance = DirectSample(ray, state, bsdfSampleRec);
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold)
     {
@@ -113,7 +114,7 @@ void main()
     if (rtxState.debugging_mode != eIndirectResult)
       pixelColor += radiance;
 
-    radiance = IndirectSample(ray, gData);
+    radiance = IndirectSample(ray, state, bsdfSampleRec);
     lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold)
     {
