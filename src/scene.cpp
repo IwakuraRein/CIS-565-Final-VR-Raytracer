@@ -370,7 +370,6 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	std::vector<TrigLight> trigLights;
 	std::vector<nvmath::mat4f> transforms;
 
-	uint i = 0;
 	for (const auto& node : gltf.m_nodes)
 	{
 		const auto& primMesh = gltf.m_primMeshes[node.primMesh];
@@ -385,7 +384,7 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[idx + 1]];
 				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[idx + 2]];
 
-				trig.transformIndex = i;
+				trig.transformIndex = transforms.size()-1;
 				trig.matIndex = primMesh.materialIndex;
 				trig.vert0 = vert0.position;
 				trig.uv0 = vert0.texcoord;
@@ -394,13 +393,12 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 				trig.vert2 = vert2.position;
 				trig.uv2 = vert2.texcoord;
 
-				trig.vert0 = node.worldMatrix * vec4(trig.vert0, 1.0);
-				trig.vert1 = node.worldMatrix * vec4(trig.vert1, 1.0);
-				trig.vert2 = node.worldMatrix * vec4(trig.vert2, 1.0);
+				//trig.vert0 = node.worldMatrix * vec4(trig.vert0, 1.0);
+				//trig.vert1 = node.worldMatrix * vec4(trig.vert1, 1.0);
+				//trig.vert2 = node.worldMatrix * vec4(trig.vert2, 1.0);
 
 				trigLights.push_back(trig);
 			}
-			i++;
 		}
 	}
 	m_trigLightWeight = createTrigLightImptSampAccel(trigLights, gltf, gltfModel);

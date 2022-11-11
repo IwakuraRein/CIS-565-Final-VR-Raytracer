@@ -114,18 +114,20 @@ void main()
   }
 
   // indirect lighting
-  for(int smpl = 0; smpl < rtxState.indirectSamples; ++smpl)
-  {
-    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-    vec3 radiance = IndirectSample(ray);
-    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold)
+  if(rtxState.debugging_mode == eNoDebug || rtxState.debugging_mode >= eRadiance) {
+    for(int smpl = 0; smpl < rtxState.indirectSamples; ++smpl)
     {
-      radiance *= rtxState.fireflyClampThreshold / lum;
+      Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+      vec3 radiance = IndirectSample(ray);
+      float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+      if(lum > rtxState.fireflyClampThreshold)
+      {
+        radiance *= rtxState.fireflyClampThreshold / lum;
+      }
+      pixelColor += radiance;
     }
-    pixelColor += radiance;
+    pixelColor /= (rtxState.directSamples+rtxState.indirectSamples);
   }
-  pixelColor /= (rtxState.directSamples+rtxState.indirectSamples);
 
   // Debug - Heatmap
   if(rtxState.debugging_mode == eHeatmap)

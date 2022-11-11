@@ -218,13 +218,20 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   TrigLight light = trigLights[id];
   vec4 dirAndPdf;
 
-  //vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
-  //vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
-  //vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+  // vec4 tmp0 = (trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
+  // vec4 tmp1 = (trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
+  // vec4 tmp2 = (trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+  // vec3 v0 = tmp0.xyz / tmp0.w;
+  // vec3 v1 = tmp1.xyz / tmp1.w;
+  // vec3 v2 = tmp2.xyz / tmp2.w;
 
-  vec3 v0 = light.vert0;
-  vec3 v1 = light.vert1;
-  vec3 v2 = light.vert2;
+  vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
+  vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
+  vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+
+  // vec3 v0 = light.vert0;
+  // vec3 v1 = light.vert1;
+  // vec3 v2 = light.vert2;
 
   vec3 normal = cross(v1 - v0, v2 - v0);
   float area = length(normal) * 0.5;
@@ -322,7 +329,7 @@ vec3 DirectSample(Ray r)
     // Sample environment
     dirAndPdf = EnvSample(Li);
     if (dirAndPdf.w <= 0.0)
-      return state.mat.emission;
+      return /*state.mat.emission*/ vec3(0.0);
     dirAndPdf.w *= rtxState.environmentProb;
   }
   else
@@ -339,7 +346,7 @@ vec3 DirectSample(Ray r)
       dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
     }
     if (dirAndPdf.w <= 0.0)
-      return state.mat.emission;
+      return /*state.mat.emission*/ vec3(0.0);
 
     dirAndPdf.w *= (1.0 - rtxState.environmentProb);
   }
@@ -348,11 +355,19 @@ vec3 DirectSample(Ray r)
   shadowRay.origin = OffsetRay(state.position, state.ffnormal);
   shadowRay.direction = dirAndPdf.xyz;
   if (AnyHit(shadowRay, dist - 1e-4))
-    return state.mat.emission;
+    return /*state.mat.emission*/ vec3(0.0);
 
   float dummyPdf;
-  return Li * Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, dummyPdf) *
-    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w + state.mat.emission;
+  vec3 bsdf = Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, dummyPdf);
+
+  if(rtxState.debugging_mode == eRadiance)
+    return Li / dirAndPdf.w;
+  else if(rtxState.debugging_mode == eWeight)
+    return bsdf;
+  else if(rtxState.debugging_mode == eRayDir)
+    return (-r.direction + vec3(1)) * 0.5;
+  return Li * bsdf *
+    max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
 }
 
 vec3 IndirectSample(Ray r)
@@ -368,16 +383,17 @@ vec3 IndirectSample(Ray r)
     // Hitting the environment
     if(prd.hitT == INFINITY)
     {
-      if(rtxState.debugging_mode != eNoDebug)
+      if(rtxState.debugging_mode != eNoDebug && depth == rtxState.maxDepth - 1)
       {
-        if(depth != rtxState.maxDepth - 1)
-          return vec3(0);
+        // if(depth != rtxState.maxDepth - 1)
+        //   return vec3(0);
         if(rtxState.debugging_mode == eRadiance)
           return radiance;
         else if(rtxState.debugging_mode == eWeight)
           return throughput;
-        else if(rtxState.debugging_mode == eRayDir)
-          return (r.direction + vec3(1)) * 0.5;
+        // cannot distinguish between indirect dir and direct dir. only have direct dir then
+        // else if(rtxState.debugging_mode == eRayDir)
+        //   return (r.direction + vec3(1)) * 0.5;
       }
 
       vec3 env;
@@ -417,8 +433,8 @@ vec3 IndirectSample(Ray r)
     state.mat.albedo *= sstate.color;
 
     // Debugging info
-    if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
-      return DebugInfo(state);
+    // if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
+    //   return vec3(0.0);
 
     // KHR_materials_unlit
     if(state.mat.unlit)
@@ -433,7 +449,7 @@ vec3 IndirectSample(Ray r)
     }
 
     // Emissive material
-    radiance += state.mat.emission * throughput;
+    if (depth != 1) radiance += state.mat.emission * throughput; // ignore direct light
 
     // Add absoption (transmission / volume)
     throughput *= exp(-absorption * prd.hitT);
