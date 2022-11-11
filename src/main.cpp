@@ -50,8 +50,8 @@ static int const SAMPLE_HEIGHT = 1080;
 int main(int argc, char** argv)
 {
 	InputParser parser(argc, argv);
-	std::string sceneFile = parser.getString("-f", "robot-toon.glb");
-	std::string hdrFilename = parser.getString("-e", "std_env.hdr");
+	std::string sceneFile = parser.getString("-f", "pica/scene.gltf");
+	std::string hdrFilename = parser.getString("-e", "daytime.hdr");
 
 	// Setup GLFW window
 	glfwSetErrorCallback(onErrorCallback);
