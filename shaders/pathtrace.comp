@@ -40,15 +40,13 @@
 
 #include "host_device.h"
 
-layout(push_constant) uniform _RtxState
-{
+layout(push_constant) uniform _RtxState {
   RtxState rtxState;
 };
 
-
 #include "globals.glsl"
 
-PtPayload        prd;
+PtPayload prd;
 ShadowHitPayload shadow_payload;
 
 #include "layouts.glsl"
@@ -67,12 +65,11 @@ layout(local_size_x = 8, local_size_y = 8) in;
 #else
 layout(local_size_x = 32, local_size_y = 2) in;
 #extension GL_EXT_shader_8bit_storage : enable  // Using uint_8 ...
-ivec2 SampleSizzled()
-{
+ivec2 SampleSizzled() {
   // Sampling Swizzling
   // Convert 32x2 to 8x8, where the sampling will follow how invocation are done in a subgroup.
   // layout(local_size_x = 32, local_size_y = 2) in;
-  ivec2 base   = ivec2(gl_WorkGroupID.xy) * 8;
+  ivec2 base = ivec2(gl_WorkGroupID.xy) * 8;
   ivec2 subset = ivec2(int(gl_LocalInvocationID.x) & 1, int(gl_LocalInvocationID.x) / 2);
   subset += gl_LocalInvocationID.x >= 16 ? ivec2(2, -8) : ivec2(0, 0);
   subset += ivec2(gl_LocalInvocationID.y * 4, 0);
@@ -84,11 +81,10 @@ ivec2 SampleSizzled()
 //--------------------------------------------------------------------------------------------------
 //
 //
-void main()
-{
+void main() {
   uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
 
-  ivec2 imageRes    = rtxState.size;
+  ivec2 imageRes = rtxState.size;
   ivec2 imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
 
   // Initialize the seed for the random number only once once
@@ -99,55 +95,48 @@ void main()
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
-  
-  for(int smpl = 0; smpl < rtxState.spp; ++smpl)
-  {
+
+  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     State state;
     BsdfSampleRec bsdfSampleRec;
     vec3 radiance = DirectSample(ray, state, bsdfSampleRec);
-    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold)
-    {
-      radiance *= rtxState.fireflyClampThreshold / lum;
+    if(rtxState.debugging_mode == eIndirectResult) {
+      radiance = vec3(0);
     }
-    if (rtxState.debugging_mode != eIndirectResult)
-      pixelColor += radiance;
+    if(rtxState.debugging_mode == eIndirectResult || 
+      rtxState.debugging_mode == eNoDebug) {
+      radiance += IndirectSample(ray, state, bsdfSampleRec);
+    }
 
-    radiance = IndirectSample(ray, state, bsdfSampleRec);
-    lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold)
-    {
+    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    if(lum > rtxState.fireflyClampThreshold) {
       radiance *= rtxState.fireflyClampThreshold / lum;
     }
-    if (rtxState.debugging_mode != eDirectResult)
-      pixelColor += radiance;
+
+    pixelColor += radiance;
   }
   pixelColor /= rtxState.spp;
 
   // Debug - Heatmap
-  if(rtxState.debugging_mode == eHeatmap)
-  {
-    uint64_t end  = clockRealtimeEXT();
-    float    low  = rtxState.minHeatmap;
-    float    high = rtxState.maxHeatmap;
-    float    val  = clamp((float(end - start) - low) / (high - low), 0.0, 1.0);
-    pixelColor    = temperature(val);
+  if(rtxState.debugging_mode == eHeatmap) {
+    uint64_t end = clockRealtimeEXT();
+    float low = rtxState.minHeatmap;
+    float high = rtxState.maxHeatmap;
+    float val = clamp((float(end - start) - low) / (high - low), 0.0, 1.0);
+    pixelColor = temperature(val);
 
     // Wrap & SM visualization
     // pixelColor = temperature(float(gl_SMIDNV) / float(gl_SMCountNV - 1)) * float(gl_WarpIDNV) / float(gl_WarpsPerSMNV - 1);
   }
 
   // Saving pixel color
-  if(rtxState.frame > 0)
-  {
+  if(rtxState.frame > 0) {
     // Do accumulation over time
-    vec3 old_color  = imageLoad(resultImage, imageCoords).xyz;
+    vec3 old_color = imageLoad(resultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
     imageStore(resultImage, imageCoords, vec4(new_result, 1.f));
-  }
-  else
-  {
+  } else {
     // First frame, replace the value in the buffer
     imageStore(resultImage, imageCoords, vec4(pixelColor, 1.f));
   }

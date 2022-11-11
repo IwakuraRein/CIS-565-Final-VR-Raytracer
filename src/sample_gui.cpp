@@ -145,9 +145,6 @@ bool SampleGUI::guiRayTracing()
 			"Roughness",
 			"TexCoord",
 			"Tangent",
-			"Radiance",
-			"Weight",
-			"RayDir",
 			"HeatMap",
 		});
 

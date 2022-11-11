@@ -281,12 +281,6 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   ClosestHit(r);
   if(prd.hitT == INFINITY) {
     state.position = vec3(INFINITY) + abs(r.origin);
-    if(rtxState.debugging_mode != eNoDebug) {
-      if(rtxState.debugging_mode == eRayDir)
-        return (r.direction + vec3(1)) * 0.5;
-      else
-        return vec3(0);
-    }
 
     vec3 env;
     if(_sunAndSky.in_use == 1)
@@ -331,7 +325,7 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
     return state.mat.albedo;
   }
 
-  if(rtxState.debugging_mode > eIndirectResult && rtxState.debugging_mode < eRadiance)
+  if(rtxState.debugging_mode > eIndirectResult/* && rtxState.debugging_mode < eWeight*/)
     return DebugInfo(state);
 
   vec4 dirAndPdf;
@@ -367,13 +361,6 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   shadowRay.origin = state.position + shadowRay.direction * 1e-4;
 
   bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
-
-  if(rtxState.debugging_mode == eRadiance)
-    return Li / dirAndPdf.w;
-  else if(rtxState.debugging_mode == eWeight)
-    return bsdfSampleRec.f;
-  else if(rtxState.debugging_mode == eRayDir)
-    return (shadowRay.direction + vec3(1)) * 0.5;
 
   if(AnyHit(shadowRay, dist - 2e-4))
     return /*state.mat.emission*/ vec3(0.0);
@@ -414,19 +401,9 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
 
       hitT = prd.hitT;
     }
-      // Hitting the environment
+    // Hitting the environment
     if(hitT >= INFINITY) {
-      if(rtxState.debugging_mode != eNoDebug && depth == rtxState.maxDepth - 1) {
-          // if(depth != rtxState.maxDepth - 1)
-          //   return vec3(0);
-        if(rtxState.debugging_mode == eRadiance)
-          return radiance;
-        else if(rtxState.debugging_mode == eWeight)
-          return throughput;
-          // cannot distinguish between indirect dir and direct dir. only have direct dir then
-          // else if(rtxState.debugging_mode == eRayDir)
-          //   return (r.direction + vec3(1)) * 0.5;
-      }
+      if (depth <= 1) return radiance;
 
       vec3 env;
       if(_sunAndSky.in_use == 1)
@@ -442,10 +419,6 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     // Color at vertices
     state.mat.albedo *= state.vertColor;
 
-    // Debugging info
-    // if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
-    //   return vec3(0.0);
-
     // Reset absorption when ray is going out of surface
     if(dot(state.normal, state.ffnormal) > 0.0) {
       absorption = vec3(0.0);
@@ -454,6 +427,14 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     // Emissive material
     if(depth != 1)
       radiance += state.mat.emission * throughput; // ignore direct light
+
+    // KHR_materials_unlit
+    if(state.mat.unlit) {
+      return radiance + state.mat.albedo * throughput;
+    }
+
+    // Add absoption (transmission / volume)
+    throughput *= exp(-absorption * hitT);
     if(depth > 1) {
       vec4 dirAndPdf;
       float dist, dummyPdf;
@@ -468,18 +449,6 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
           max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w * throughput;
       }
     }
-
-    // KHR_materials_unlit
-    if(state.mat.unlit) {
-      return radiance + state.mat.albedo * throughput;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * hitT);
-
-    // Light and environment contribution
-    // VisibilityContribution vcontrib = DirectLight(r, state);
-    // vcontrib.radiance *= throughput;
 
     // Sampling for the next ray
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
@@ -496,14 +465,9 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     }
 
     // Debugging info
-    if(rtxState.debugging_mode != eNoDebug && (depth == rtxState.maxDepth - 1)) {
-      // if(rtxState.debugging_mode == eRadiance)
-      //   return vcontrib.radiance;
-      /*else*/ if(rtxState.debugging_mode == eWeight)
-        return throughput;
-      // else if(rtxState.debugging_mode == eRayDir)
-      //   return (r.direction + vec3(1)) * 0.5;
-    }
+    // if(rtxState.debugging_mode == eWeight && (depth == rtxState.maxDepth - 1)) {
+    //     return throughput;
+    // }
 
 #ifdef RR
     // For Russian-Roulette (minimizing live state)
