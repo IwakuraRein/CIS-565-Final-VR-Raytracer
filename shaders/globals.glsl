@@ -29,6 +29,8 @@
 #define INFINITY 1e32
 #define EPS 0.0001
 
+#define SPECULAR_THRESHOLD 0.1
+
 //precision highp int;
 precision highp float;
 

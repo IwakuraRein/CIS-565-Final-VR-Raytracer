@@ -279,7 +279,7 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   // }
   // TODO: write to gbuffer
   ClosestHit(r);
-  if(prd.hitT == INFINITY) {
+  if(prd.hitT >= INFINITY) {
     state.position = vec3(INFINITY) + abs(r.origin);
 
     vec3 env;
@@ -327,6 +327,9 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
 
   if(rtxState.debugging_mode > eIndirectResult/* && rtxState.debugging_mode < eWeight*/)
     return DebugInfo(state);
+
+  if(state.mat.roughness <= SPECULAR_THRESHOLD)
+    return vec3(0.0);
 
   vec4 dirAndPdf;
   vec3 Li = vec3(0.0);
@@ -403,7 +406,8 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     }
     // Hitting the environment
     if(hitT >= INFINITY) {
-      if (depth <= 1) return radiance;
+      if(depth <= 1 && state.mat.roughness > SPECULAR_THRESHOLD)
+        return radiance;
 
       vec3 env;
       if(_sunAndSky.in_use == 1)
@@ -425,7 +429,7 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     }
 
     // Emissive material
-    if(depth != 1)
+    if(depth != 1 || state.mat.roughness > SPECULAR_THRESHOLD)
       radiance += state.mat.emission * throughput; // ignore direct light
 
     // KHR_materials_unlit
@@ -440,13 +444,13 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
       float dist, dummyPdf;
       vec3 Li;
       dirAndPdf = SamplePuncLight(state.position, Li, dist);
-      Ray shadowRay;
-      shadowRay.direction = dirAndPdf.xyz;
-      shadowRay.origin = state.position + shadowRay.direction * 1e-4;
-      if (dirAndPdf.w > 0) {
-      if(!AnyHit(shadowRay, dist - 2e-4))
-        radiance += Li * Eval(state, -r.direction, state.ffnormal, shadowRay.direction, dummyPdf) *
-          max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w * throughput;
+      if(dirAndPdf.w > 0) {
+        Ray shadowRay;
+        shadowRay.direction = dirAndPdf.xyz;
+        shadowRay.origin = state.position + shadowRay.direction * 1e-4;
+        if(!AnyHit(shadowRay, dist - 2e-4))
+          radiance += Li * Eval(state, -r.direction, state.ffnormal, shadowRay.direction, dummyPdf) *
+            max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w * throughput;
       }
     }
 
