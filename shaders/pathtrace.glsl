@@ -218,15 +218,12 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   TrigLight light = trigLights[id];
   vec4 dirAndPdf;
 
-  vec4 tmp0 = (trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
-  vec4 tmp1 = (trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
-  vec4 tmp2 = (trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
-  vec3 v0 = tmp0.xyz/* / (tmp0.w)*/;
-  vec3 v1 = tmp1.xyz/* / (tmp1.w)*/;
-  vec3 v2 = tmp2.xyz/* / (tmp2.w)*/;
-  // vec3 v0 = light.vert0;
-  // vec3 v1 = light.vert1;
-  // vec3 v2 = light.vert2;
+  vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert0, 1.0));
+  vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert1, 1.0));
+  vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.vert2, 1.0));
+  //vec3 v0 = light.vert0;
+  //vec3 v1 = light.vert1;
+  //vec3 v2 = light.vert2;
 
   vec3 normal = cross(v1 - v0, v2 - v0);
   float area = length(normal) * 0.5;
@@ -244,8 +241,10 @@ vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist)
   }
   dirAndPdf.xyz = normalize(y - x);
   dirAndPdf.w = light.impSamp.pdf / area * dot(y - x, y - x) / abs(dot(dirAndPdf.xyz, normal));
+  // dirAndPdf.w = 1.0;
   dist = length(y - x);
   radiance = emission / area;
+  // radiance = emission;
   return dirAndPdf;
 }
 

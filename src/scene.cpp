@@ -377,11 +377,11 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 		nvh::GltfMaterial mtl = gltf.m_materials[primMesh.materialIndex];
 		if (luminance(mtl.emissiveFactor) > 1e-2f) {
 			transforms.push_back(nvmath::transpose(node.worldMatrix)); // nvmath is row-major
-			for (uint32_t i = primMesh.firstIndex; i < primMesh.firstIndex + primMesh.indexCount - 1; i += 3) {
+			for (uint32_t idx = primMesh.firstIndex; idx < primMesh.firstIndex + primMesh.indexCount - 1; idx += 3) {
 				TrigLight trig;
-				VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[i]];
-				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[i + 1]];
-				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[i + 2]];
+				VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[idx]];
+				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[idx + 1]];
+				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[idx + 2]];
 
 				trig.transformIndex = i;
 				trig.matIndex = primMesh.materialIndex;
