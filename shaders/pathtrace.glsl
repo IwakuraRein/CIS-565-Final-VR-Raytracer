@@ -271,8 +271,25 @@ vec3 DirectSample(Ray r)
 {
   // TODO: write to gbuffer
   ClosestHit(r);
-  if (prd.hitT == INFINITY)
-    return vec3(0.0);
+  if (prd.hitT == INFINITY) {
+      if(rtxState.debugging_mode != eNoDebug)
+      {
+        if(rtxState.debugging_mode == eRayDir)
+          return (r.direction + vec3(1)) * 0.5;
+        else return vec3(0);
+      }
+
+      vec3 env;
+      if(_sunAndSky.in_use == 1)
+        env = sun_and_sky(_sunAndSky, r.direction);
+      else
+      {
+        vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
+        env     = texture(environmentTexture, uv).rgb;
+      }
+      // Done sampling return
+      return (env * rtxState.hdrMultiplier);
+  }
 
   ShadeState sstate = GetShadeState(prd);
 
@@ -293,6 +310,9 @@ vec3 DirectSample(Ray r)
 
   // Color at vertices
   state.mat.albedo *= sstate.color;
+
+  if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
+    return DebugInfo(state);
 
   vec4 dirAndPdf;
   vec3 Li = vec3(0.0);

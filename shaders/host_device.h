@@ -212,6 +212,9 @@ struct RtxState
 	int   minHeatmap;             // Debug mode - heat map
 	int   maxHeatmap;
 	float environmentProb;        // Used in direct light importance sampling
+
+	float time;                   // How long has the app been running. Seconds.
+	vec3  pad;
 };
 
 // Structure used for retrieving the primitive information in the closest hit
