@@ -254,7 +254,7 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
   return dirAndPdf;
 }
 
-vec3 DirectSample(Ray r, out GeomData gData) {
+vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
   //   vec3 v0 = light.v0;
@@ -280,6 +280,7 @@ vec3 DirectSample(Ray r, out GeomData gData) {
   // TODO: write to gbuffer
   ClosestHit(r);
   if(prd.hitT == INFINITY) {
+    state.position = vec3(INFINITY) + abs(r.origin);
     if(rtxState.debugging_mode != eNoDebug) {
       if(rtxState.debugging_mode == eRayDir)
         return (r.direction + vec3(1)) * 0.5;
@@ -299,8 +300,7 @@ vec3 DirectSample(Ray r, out GeomData gData) {
   }
 
   ShadeState sstate = GetShadeState(prd);
-
-  State state;
+  GeomData gData;
   state.position = sstate.position;
   gData.position = sstate.position;
   state.normal = sstate.normal;
@@ -317,6 +317,7 @@ vec3 DirectSample(Ray r, out GeomData gData) {
   state.isSubsurface = false;
   state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
 
+  state.vertColor = sstate.color;
   gData.color = sstate.color;
 
   // Filling material structures
@@ -334,23 +335,23 @@ vec3 DirectSample(Ray r, out GeomData gData) {
     return DebugInfo(state);
 
   vec4 dirAndPdf;
-  vec3 Li = vec3(0.0);
+  bsdfSampleRec.L = vec3(0.0);
   float dist = 1e24;
 
   if(rand(prd.seed) < rtxState.environmentProb) {
     // Sample environment
-    dirAndPdf = EnvSample(Li);
+    dirAndPdf = EnvSample(bsdfSampleRec.L);
     if(dirAndPdf.w <= 0.0)
       return /*state.mat.emission*/ vec3(0.0);
     dirAndPdf.w *= rtxState.environmentProb;
   } else {
     if(rand(prd.seed) < lightBufInfo.trigSampProb) {
       // Sample triangle mesh light
-      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
+      dirAndPdf = SampleTriangleLight(state.position, bsdfSampleRec.L, dist);
       dirAndPdf.w *= lightBufInfo.trigSampProb;
     } else {
       // Sample point light
-      dirAndPdf = SamplePuncLight(state.position, Li, dist);
+      dirAndPdf = SamplePuncLight(state.position, bsdfSampleRec.L, dist);
       dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
     }
     if(dirAndPdf.w <= 0.0)
@@ -365,88 +366,77 @@ vec3 DirectSample(Ray r, out GeomData gData) {
   if(AnyHit(shadowRay, dist - 1e-4))
     return /*state.mat.emission*/ vec3(0.0);
 
-  float dummyPdf;
-  vec3 bsdf = Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, dummyPdf);
+  bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, dirAndPdf.xyz, bsdfSampleRec.pdf);
 
   if(rtxState.debugging_mode == eRadiance)
-    return Li / dirAndPdf.w;
+    return bsdfSampleRec.L / dirAndPdf.w;
   else if(rtxState.debugging_mode == eWeight)
-    return bsdf;
+    return bsdfSampleRec.f;
   else if(rtxState.debugging_mode == eRayDir)
     return (-r.direction + vec3(1)) * 0.5;
-  return Li * bsdf *
+  return bsdfSampleRec.L * bsdfSampleRec.f *
     max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
 }
 
-vec3 IndirectSample(Ray r, GeomData gData) {
+vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
 
   for(int depth = 0; depth < rtxState.maxDepth; depth++) {
-    State state;
-    vec3 vertColor;
-    vec3 position;
+    float hitT;
     if(depth == 0) {
-      position = gData.position;
-      state.normal = gData.normal;
-      state.tangent = gData.tangent;
-      state.bitangent = cross(gData.normal, gData.tangent);
-      state.texCoord = gData.texCoord;
-      state.matID = gData.matIndex;
-      vertColor = gData.color;
+      hitT = length(state.position - r.origin);
     } else {
       ClosestHit(r);
 
-      // Hitting the environment
-      if(prd.hitT == INFINITY) {
-        if(rtxState.debugging_mode != eNoDebug && depth == rtxState.maxDepth - 1) {
-          // if(depth != rtxState.maxDepth - 1)
-          //   return vec3(0);
-          if(rtxState.debugging_mode == eRadiance)
-            return radiance;
-          else if(rtxState.debugging_mode == eWeight)
-            return throughput;
-          // cannot distinguish between indirect dir and direct dir. only have direct dir then
-          // else if(rtxState.debugging_mode == eRayDir)
-          //   return (r.direction + vec3(1)) * 0.5;
-        }
-
-        vec3 env;
-        if(_sunAndSky.in_use == 1)
-          env = sun_and_sky(_sunAndSky, r.direction);
-        else {
-          vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
-          env = texture(environmentTexture, uv).rgb;
-        }
-        // Done sampling return
-        return radiance + (env * rtxState.hdrMultiplier * throughput);
-      }
-
       // Get Position, Normal, Tangents, Texture Coordinates, Color
       ShadeState sstate = GetShadeState(prd);
-      position = sstate.position;
+      state.position = sstate.position;
       state.normal = sstate.normal;
       state.tangent = sstate.tangent_u[0];
       state.bitangent = sstate.tangent_v[0];
       state.texCoord = sstate.text_coords[0];
       state.matID = sstate.matIndex;
-      vertColor = sstate.color;
+      state.vertColor = sstate.color;
+      state.position = sstate.position;
+      state.isEmitter = false;
+      state.specularBounce = false;
+      state.isSubsurface = false;
+      state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+
+      // Filling material structures
+      GetMaterialsAndTextures(state, r);
+
+      hitT = prd.hitT;
     }
-    state.position = position;
-    state.isEmitter = false;
-    state.specularBounce = false;
-    state.isSubsurface = false;
-    state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
-    
+      // Hitting the environment
+    if(hitT >= INFINITY) {
+      if(rtxState.debugging_mode != eNoDebug && depth == rtxState.maxDepth - 1) {
+          // if(depth != rtxState.maxDepth - 1)
+          //   return vec3(0);
+        if(rtxState.debugging_mode == eRadiance)
+          return radiance;
+        else if(rtxState.debugging_mode == eWeight)
+          return throughput;
+          // cannot distinguish between indirect dir and direct dir. only have direct dir then
+          // else if(rtxState.debugging_mode == eRayDir)
+          //   return (r.direction + vec3(1)) * 0.5;
+      }
 
-    BsdfSampleRec bsdfSampleRec;
-
-    // Filling material structures
-    GetMaterialsAndTextures(state, r);
+      vec3 env;
+      if(_sunAndSky.in_use == 1)
+        env = sun_and_sky(_sunAndSky, r.direction);
+      else {
+        vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
+        env = texture(environmentTexture, uv).rgb;
+      }
+        // Done sampling return
+      return radiance + (env * rtxState.hdrMultiplier * throughput);
+    }
 
     // Color at vertices
-    state.mat.albedo *= vertColor;
+    state.mat.albedo *= state.vertColor;
 
     // Debugging info
     // if(rtxState.debugging_mode != eNoDebug && rtxState.debugging_mode < eRadiance)
@@ -467,7 +457,7 @@ vec3 IndirectSample(Ray r, GeomData gData) {
     }
 
     // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
+    throughput *= exp(-absorption * hitT);
 
     // Light and environment contribution
     // VisibilityContribution vcontrib = DirectLight(r, state);
@@ -504,7 +494,7 @@ vec3 IndirectSample(Ray r, GeomData gData) {
 
     // Next ray
     r.direction = bsdfSampleRec.L;
-    r.origin = OffsetRay(position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
 
     // We are adding the contribution to the radiance only if the ray is not occluded by an object.
     // This is done here to minimize live state across ray-trace calls.

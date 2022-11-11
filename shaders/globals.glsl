@@ -112,6 +112,7 @@ struct State
   vec3 tangent;
   vec3 bitangent;
   vec2 texCoord;
+  vec3 vertColor;
 
   bool isEmitter;
   bool specularBounce;
