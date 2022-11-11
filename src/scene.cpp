@@ -125,10 +125,6 @@ bool Scene::load(const std::string& filename)
 	m_gltf.m_materials = gltf.m_materials;
 	m_gltf.m_dimensions = gltf.m_dimensions;
 
-	m_pVertices.reset(nullptr);
-	m_pIndices.reset(nullptr);
-	m_pShadeMaterials.reset(nullptr);
-
 	return true;
 }
 
@@ -219,9 +215,6 @@ void Scene::createVertexBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& glt
 	LOGI(" - Create %d Vertex Buffers", gltf.m_primMeshes.size());
 	MilliTimer timer;
 
-	m_pVertices = std::make_unique<std::vector<VertexAttributes>>();
-	m_pIndices = std::make_unique<std::vector<uint32_t>>();
-
 	std::unordered_map<std::string, nvvk::Buffer> m_cachePrimitive;
 
 	uint32_t prim_idx{ 0 };
@@ -265,7 +258,6 @@ void Scene::createVertexBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& glt
 					value &= ~1;  // clear bit, H == -1
 				v.texcoord.y = uintBitsToFloat(value);
 
-				m_pVertices->push_back(v);
 				vertices.push_back(v);
 			}
 			v_buffer = m_pAlloc->createBuffer(cmdBuf, vertices,
@@ -282,7 +274,6 @@ void Scene::createVertexBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& glt
 		// Buffer of indices
 		for (size_t idx = 0; idx < primMesh.indexCount; idx++)
 		{
-			m_pIndices->push_back(gltf.m_indices[idx + primMesh.firstIndex]);
 			indices.push_back(gltf.m_indices[idx + primMesh.firstIndex]);
 		}
 
@@ -373,29 +364,34 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	for (const auto& node : gltf.m_nodes)
 	{
 		const auto& primMesh = gltf.m_primMeshes[node.primMesh];
-		nvh::GltfMaterial mtl = gltf.m_materials[primMesh.materialIndex];
+		nvh::GltfMaterial mat = gltf.m_materials[primMesh.materialIndex];
 		
-		if (luminance(mtl.emissiveFactor) > 1e-2f) {
-			std::cout << luminance(mtl.emissiveFactor) << " Emissive\n";
-			transforms.push_back(node.worldMatrix); // nvmath is col-major
+		if (luminance(mat.emissiveFactor) > 1e-2f) {
+			//std::cout << luminance(mat.emissiveFactor) << " Emissive\n";
+
+			// so far we only test static light sources .
+			//transforms.push_back(node.worldMatrix); // nvmath is col-major
 			for (uint32_t idx = primMesh.firstIndex; idx < primMesh.firstIndex + primMesh.indexCount - 1; idx += 3) {
 				TrigLight trig;
-				VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[idx]];
-				VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[idx + 1]];
-				VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[idx + 2]];
+				//VertexAttributes vert0 = (*m_pVertices)[(*m_pIndices)[idx]];
+				//VertexAttributes vert1 = (*m_pVertices)[(*m_pIndices)[idx + 1]];
+				//VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[idx + 2]];
 
+				uint32_t index0 = gltf.m_indices[idx] + primMesh.vertexOffset;
+				uint32_t index1 = gltf.m_indices[idx+1] + primMesh.vertexOffset;
+				uint32_t index2 = gltf.m_indices[idx+2] + primMesh.vertexOffset;
 				trig.transformIndex = transforms.size()-1;
 				trig.matIndex = primMesh.materialIndex;
-				trig.vert0 = vert0.position;
-				trig.uv0 = vert0.texcoord;
-				trig.vert1 = vert1.position;
-				trig.uv1 = vert1.texcoord;
-				trig.vert2 = vert2.position;
-				trig.uv2 = vert2.texcoord;
+				trig.v0 = gltf.m_positions[index0];
+				trig.uv0 = gltf.m_texcoords0[index0];
+				trig.v1 = gltf.m_positions[index1];
+				trig.uv1 = gltf.m_texcoords0[index1];
+				trig.v2 = gltf.m_positions[index2];
+				trig.uv2 = gltf.m_texcoords0[index2];
 
-				//trig.vert0 = node.worldMatrix * vec4(trig.vert0, 1.0);
-				//trig.vert1 = node.worldMatrix * vec4(trig.vert1, 1.0);
-				//trig.vert2 = node.worldMatrix * vec4(trig.vert2, 1.0);
+				trig.v0 = node.worldMatrix * vec4(trig.v0, 1.0);
+				trig.v1 = node.worldMatrix * vec4(trig.v1, 1.0);
+				trig.v2 = node.worldMatrix * vec4(trig.v2, 1.0);
 
 				trigLights.push_back(trig);
 			}
@@ -406,6 +402,8 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	m_lightBufInfo.trigLightSize = trigLights.size();
 	if (trigLights.empty()) {  // Cannot be null
 		trigLights.emplace_back(TrigLight{});
+	}
+	if (transforms.empty()) {
 		transforms.emplace_back(nvmath::mat4f{});
 	}
 	m_buffer[eTrigLights] = m_pAlloc->createBuffer(cmdBuf, trigLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -423,7 +421,8 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 	LOGI(" - Create %d Material Buffer", gltf.m_materials.size());
 	MilliTimer timer;
 
-	m_pShadeMaterials = std::make_unique<std::vector<GltfShadeMaterial>>();
+	std::vector<GltfShadeMaterial> shadeMaterials;
+	shadeMaterials.reserve(gltf.m_materials.size());
 	for (auto& m : gltf.m_materials)
 	{
 		GltfShadeMaterial smat{};
@@ -462,9 +461,9 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 		smat.clearcoatRoughnessTexture = m.clearcoat.roughnessTexture;
 		smat.sheen = packUnorm4x8(vec4(m.sheen.colorFactor, m.sheen.roughnessFactor));
 
-		m_pShadeMaterials->emplace_back(smat);
+		shadeMaterials.emplace_back(smat);
 	}
-	m_buffer[eMaterial] = m_pAlloc->createBuffer(cmdBuf, *m_pShadeMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	m_buffer[eMaterial] = m_pAlloc->createBuffer(cmdBuf, shadeMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	NAME_VK(m_buffer[eMaterial].buffer);
 	timer.print();
 }
@@ -527,10 +526,6 @@ void Scene::destroy()
 	m_descPool = VkDescriptorPool();
 	m_descSetLayout = VkDescriptorSetLayout();
 	m_descSet = VkDescriptorSet();
-
-	m_pVertices.reset(nullptr);
-	m_pIndices.reset(nullptr);
-	m_pShadeMaterials.reset(nullptr);
 }
 
 //--------------------------------------------------------------------------------------------------

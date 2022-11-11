@@ -78,7 +78,6 @@ public:
 	const std::vector<nvvk::Buffer>& getBuffers(EBuffers b) { return m_buffers[b]; }
 	const std::string& getSceneName() const { return m_sceneName; }
 	SceneCamera& getCamera() { return m_camera; }
-
 private:
 	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
 	void createDescriptorSet(const nvh::GltfScene& gltf);
@@ -102,11 +101,6 @@ private:
 	std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_images;           // vector of all images of the scene
 	std::vector<size_t>                                    m_defaultTextures;  // for cleanup
 
-	// to create mesh lights' alias table, we need to temporarily store all mesh info
-	// they will be cleared after loading
-	std::unique_ptr<std::vector<VertexAttributes>>  m_pVertices;
-	std::unique_ptr<std::vector<uint32_t>>          m_pIndices;
-	std::unique_ptr<std::vector<GltfShadeMaterial>> m_pShadeMaterials;
 
 	VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
 	VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
