@@ -152,17 +152,18 @@ public:
 	RtxState m_rtxState{
 		0,       // frame;
 		8,       // maxDepth;
-		1,       // directSamples;
-		1,       // indirectSamples;
+		1,       // samples per pixel;
 		1,       // fireflyClampThreshold;
+
 		1,       // hdrMultiplier;
 		0,       // debugging_mode;
 		0,       // pbrMode;
-		//0,       // _pad0;
+		0.25f,
+
 		{0, 0},  // size;
 		0,       // minHeatmap;
 		65000,   // maxHeatmap;
-		0.25f
+		0
 	};
 
 	SunAndSky m_sunAndSky{

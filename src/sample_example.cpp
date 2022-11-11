@@ -285,6 +285,7 @@ void SampleExample::destroyResources()
 void SampleExample::onResize(int /*w*/, int /*h*/)
 {
 	m_offscreen.update(m_size);
+	m_pRender->update(m_size);
 	resetFrame();
 }
 

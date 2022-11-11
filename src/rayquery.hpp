@@ -46,9 +46,11 @@ class RayQuery : public Renderer
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator) override;
   void destroy() override;
-  void create(const VkExtent2D& size, const std::vector<VkDescriptorSetLayout>& rtDescSetLayouts, Scene* scene) override;
-  void              run(const VkCommandBuffer& cmdBuf, const VkExtent2D& size, nvvk::ProfilerVK& profiler, const std::vector<VkDescriptorSet>& descSets) override;
+  void create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> rtDescSetLayouts, Scene* scene) override;
+  void              run(const VkCommandBuffer& cmdBuf, const VkExtent2D& size, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets) override;
   const std::string name() override { return std::string("RQ"); }
+  void update(const VkExtent2D& size) override;
+  void createDescriptorSet();
 
 private:
   uint32_t m_nbHit{0};
@@ -60,6 +62,11 @@ private:
   VkDevice                 m_device{VK_NULL_HANDLE};
   uint32_t                 m_queueIndex{0};
 
+  nvvk::Buffer m_buffer;
+  uint m_bufferSize;
+  VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
+  VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
+  VkDescriptorSet       m_descSet{ VK_NULL_HANDLE };
 
   VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
   VkPipeline       m_pipeline{VK_NULL_HANDLE};
