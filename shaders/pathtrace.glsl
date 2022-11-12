@@ -451,8 +451,10 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
 
   Ray shadowRay;
   BsdfSampleRec bsdfSampleRec;
-  float pdfMultiplier = min(state.mat.roughness * 2.0, 1.0);
-  if(rand(prd.seed) > (1.0 - state.mat.roughness * 2.0)) { // importance sampling on light sources
+  // if roughness > 0.5, sample light sources only
+  // else let random number decide
+  float lightsourcePorb = min(state.mat.roughness * 2.0, 1.0);
+  if(rand(prd.seed) < lightsourcePorb) { // importance sampling on light sources
 
     vec4 dirAndPdf;
     vec3 Li = vec3(0.0);
@@ -461,7 +463,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
     if(rnd < rtxState.environmentProb) {
         // Sample environment
       dirAndPdf = EnvSample(Li);
-      dirAndPdf.w *= pdfMultiplier;
+      dirAndPdf.w *= lightsourcePorb;
       if(dirAndPdf.w <= 0.0)
         return state.mat.emission;
       dirAndPdf.w *= rtxState.environmentProb;
@@ -475,7 +477,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
         dirAndPdf = SamplePuncLight(state.position, Li, dist);
         dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
       }
-      dirAndPdf.w *= pdfMultiplier;
+      dirAndPdf.w *= lightsourcePorb;
       if(dirAndPdf.w <= 0.0)
         return state.mat.emission;
 
@@ -527,7 +529,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
       // state2.vertColor = sstate.color;
       GetMaterialsAndTextures(state2, shadowRay);
 
-      return state.mat.emission + state2.mat.emission * throughput / (1.0 - pdfMultiplier);
+      return state.mat.emission + state2.mat.emission * throughput / (1.0 - lightsourcePorb);
     } else {
       return vec3(0.0);
     }
