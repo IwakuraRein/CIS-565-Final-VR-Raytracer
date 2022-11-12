@@ -442,7 +442,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   state.mat.albedo *= sstate.color;
   gbuffer[rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = gData;
 
-  if(rtxState.debugging_mode > eIndirectResult)
+  if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);
 
   if(state.mat.unlit) {

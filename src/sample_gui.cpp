@@ -145,16 +145,16 @@ bool SampleGUI::guiRayTracing()
 			"Roughness",
 			"TexCoord",
 			"Tangent",
-			"HeatMap",
+			// "HeatMap",
 		});
 
-	if (rtxState.debugging_mode == eHeatmap)
-	{
-		changed |= GuiH::Drag("Min Heat map", "Minimum timing value, below this value it will be blue",
-			&rtxState.minHeatmap, nullptr, Normal, 0, 1'000'000, 100);
-		changed |= GuiH::Drag("Max Heat map", "Maximum timing value, above this value it will be red",
-			&rtxState.maxHeatmap, nullptr, Normal, 0, 1'000'000, 100);
-	}
+	// if (rtxState.debugging_mode == eHeatmap)
+	// {
+	// 	changed |= GuiH::Drag("Min Heat map", "Minimum timing value, below this value it will be blue",
+	// 		&rtxState.minHeatmap, nullptr, Normal, 0, 1'000'000, 100);
+	// 	changed |= GuiH::Drag("Max Heat map", "Maximum timing value, above this value it will be red",
+	// 		&rtxState.maxHeatmap, nullptr, Normal, 0, 1'000'000, 100);
+	// }
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
@@ -190,7 +190,7 @@ bool SampleGUI::guiTonemapper()
 		0.5f,          // key;     // Log-average luminance
 	};
 
-	auto& tm = _se->m_offscreen.m_tonemapper;
+	auto& tm = _se->m_offscreen.m_push.tm;
 	bool           changed{ false };
 	std::bitset<8> b(tm.autoExposure);
 
@@ -370,7 +370,7 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 		collect.statTone.y += float(info.cpu.average / 1000.0f);
 		collect.frameTime += 1000.0f / ImGui::GetIO().Framerate;
 
-		if (_se->m_offscreen.m_tonemapper.autoExposure == 1)
+		if (_se->m_offscreen.m_push.tm.autoExposure == 1)
 		{
 			profiler.getTimerInfo("Mipmap", info);
 			mipmapGen = float(info.gpu.average / 1000.0f);
@@ -394,7 +394,7 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 	ImGui::Text("Frame     [ms]: %2.3f", display.frameTime);
 	ImGui::Text("Render GPU/CPU [ms]: %2.3f  /  %2.3f", display.statRender.x, display.statRender.y);
 	ImGui::Text("Tone+UI GPU/CPU [ms]: %2.3f  /  %2.3f", display.statTone.x, display.statTone.y);
-	if (_se->m_offscreen.m_tonemapper.autoExposure == 1)
+	if (_se->m_offscreen.m_push.tm.autoExposure == 1)
 		ImGui::Text("Mipmap Gen: %2.3fms", mipmapGen);
 	ImGui::ProgressBar(display.statRender.x / display.frameTime);
 

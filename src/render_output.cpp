@@ -50,7 +50,8 @@ void RenderOutput::setup(const VkDevice& device, const VkPhysicalDevice& physica
 
 void RenderOutput::destroy()
 {
-  m_pAlloc->destroy(m_offscreenColor);
+  m_pAlloc->destroy(m_directResult);
+  m_pAlloc->destroy(m_indirectResult);
 
   vkDestroyPipeline(m_device, m_postPipeline, nullptr);
   vkDestroyPipelineLayout(m_device, m_postPipelineLayout, nullptr);
@@ -78,9 +79,13 @@ void RenderOutput::update(const VkExtent2D& size)
 void RenderOutput::createOffscreenRender(const VkExtent2D& size)
 {
   m_size = size;
-  if(m_offscreenColor.image != VK_NULL_HANDLE)
+  if(m_directResult.image != VK_NULL_HANDLE)
   {
-    m_pAlloc->destroy(m_offscreenColor);
+    m_pAlloc->destroy(m_directResult);
+  }
+  if(m_indirectResult.image != VK_NULL_HANDLE)
+  {
+    m_pAlloc->destroy(m_indirectResult);
   }
 
   // Creating the color image
@@ -89,21 +94,27 @@ void RenderOutput::createOffscreenRender(const VkExtent2D& size)
         size, m_offscreenColorFormat,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
 
-    nvvk::Image image = m_pAlloc->createImage(colorCreateInfo);
-    NAME_VK(image.image);
-    VkImageViewCreateInfo ivInfo = nvvk::makeImageViewCreateInfo(image.image, colorCreateInfo);
+    nvvk::Image image1 = m_pAlloc->createImage(colorCreateInfo);
+    NAME_VK(image1.image);
+    nvvk::Image image2 = m_pAlloc->createImage(colorCreateInfo);
+    NAME_VK(image2.image);
+    VkImageViewCreateInfo ivInfo1 = nvvk::makeImageViewCreateInfo(image1.image, colorCreateInfo);
+    VkImageViewCreateInfo ivInfo2 = nvvk::makeImageViewCreateInfo(image2.image, colorCreateInfo);
 
     VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     sampler.maxLod                          = FLT_MAX;
-    m_offscreenColor                        = m_pAlloc->createTexture(image, ivInfo, sampler);
-    m_offscreenColor.descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    m_directResult                          = m_pAlloc->createTexture(image1, ivInfo1, sampler);
+    m_indirectResult                        = m_pAlloc->createTexture(image2, ivInfo2, sampler);
+    m_directResult.descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    m_indirectResult.descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
   }
 
   // Setting the image layout for both color and depth
   {
     nvvk::CommandPool genCmdBuf(m_device, m_queueIndex);
     auto              cmdBuf = genCmdBuf.createCommandBuffer();
-    nvvk::cmdBarrierImageLayout(cmdBuf, m_offscreenColor.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    nvvk::cmdBarrierImageLayout(cmdBuf, m_directResult.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    nvvk::cmdBarrierImageLayout(cmdBuf, m_indirectResult.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
     genCmdBuf.submitAndWait(cmdBuf);
   }
@@ -121,7 +132,7 @@ void RenderOutput::createPostPipeline(const VkRenderPass& renderPass)
   vkDestroyPipelineLayout(m_device, m_postPipelineLayout, nullptr);
 
   // Push constants in the fragment shader
-  VkPushConstantRange pushConstantRanges{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Tonemapper)};
+  VkPushConstantRange pushConstantRanges{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstant)};
 
   // Creating the pipeline layout
   VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -155,27 +166,34 @@ void RenderOutput::createPostDescriptor()
 
   // This descriptor is passed to the RTX pipeline
   // Ray tracing will write to the binding 1, but the fragment shader will be using binding 0, so it can use a sampler too.
-  bind.addBinding({OutputBindings::eSampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT});
-  bind.addBinding({OutputBindings::eStore, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,
+  bind.addBinding({OutputBindings::eDirectSampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT});
+  bind.addBinding({OutputBindings::eIndirectSampler, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT});
+  
+  bind.addBinding({OutputBindings::eDirectResult, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,
+                   VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR});
+  bind.addBinding({OutputBindings::eIndirectResult, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,
                    VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR});
   m_postDescSetLayout = bind.createLayout(m_device);
   m_postDescPool      = bind.createPool(m_device);
   m_postDescSet       = nvvk::allocateDescriptorSet(m_device, m_postDescPool, m_postDescSetLayout);
 
   std::vector<VkWriteDescriptorSet> writes;
-  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eSampler, &m_offscreenColor.descriptor));  // This is use by the tonemapper
-  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eStore, &m_offscreenColor.descriptor));  // This will be used by the ray trace to write the image
+  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eDirectSampler, &m_directResult.descriptor));  // This is use by the tonemapper
+  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eIndirectSampler, &m_indirectResult.descriptor));  // This is use by the tonemapper
+  
+  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eDirectResult, &m_directResult.descriptor));  // This will be used by the ray trace to write the image
+  writes.emplace_back(bind.makeWrite(m_postDescSet, OutputBindings::eIndirectResult, &m_indirectResult.descriptor));  // This will be used by the ray trace to write the image
   vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
 //--------------------------------------------------------------------------------------------------
 // Draw a full screen quad with the attached image
 //
-void RenderOutput::run(VkCommandBuffer cmdBuf)
+void RenderOutput::run(VkCommandBuffer cmdBuf, int debugging_mode)
 {
   LABEL_SCOPE_VK(cmdBuf);
-
-  vkCmdPushConstants(cmdBuf, m_postPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Tonemapper), &m_tonemapper);
+  m_push.debugging_mode = debugging_mode;
+  vkCmdPushConstants(cmdBuf, m_postPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstant), &m_push);
   vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipeline);
   vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipelineLayout, 0, 1, &m_postDescSet, 0, nullptr);
   vkCmdDraw(cmdBuf, 3, 1, 0, 0);
@@ -188,6 +206,8 @@ void RenderOutput::run(VkCommandBuffer cmdBuf)
 void RenderOutput::genMipmap(VkCommandBuffer cmdBuf)
 {
   LABEL_SCOPE_VK(cmdBuf);
-  nvvk::cmdGenerateMipmaps(cmdBuf, m_offscreenColor.image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_directResult.image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
+                           VK_IMAGE_LAYOUT_GENERAL);
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult.image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
                            VK_IMAGE_LAYOUT_GENERAL);
 }

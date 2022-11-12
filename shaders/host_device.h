@@ -67,8 +67,10 @@ END_ENUM();
 
 // Output image - Set 1
 START_ENUM(OutputBindings)
-eSampler = 0,  // As sampler
-eStore = 1   // As storage
+eDirectSampler = 0,  // As sampler
+eIndirectSampler = 1,  // As sampler
+eDirectResult = 2,   // As storage
+eIndirectResult = 3   // As storage
 END_ENUM();
 
 // Scene Data - Set 2
@@ -96,8 +98,8 @@ END_ENUM();
 
 START_ENUM(DebugMode)
 eNoDebug = 0,   //
-eDirectResult = 1, //
-eIndirectResult = 2, //
+eDirectStage = 1, //
+eIndirectStage = 2, //
 eBaseColor = 3,   //
 eNormal = 4,   //
 eMetallic = 5,   //
@@ -105,8 +107,8 @@ eEmissive = 6,   //
 eAlpha = 7,   //
 eRoughness = 8,   //
 eTexcoord = 9,   //
-eTangent = 10,   //
-eHeatmap = 11   //
+eTangent = 10   //
+// eHeatmap = 11   //
 END_ENUM();
 // clang-format on
 
@@ -297,12 +299,15 @@ struct Tonemapper
 	float contrast;
 	float saturation;
 	float vignette;
+
 	float avgLum;
 	float zoom;
 	vec2  renderingRatio;
+
 	int   autoExposure;
 	float Ywhite;  // Burning white
 	float key;     // Log-average luminance
+	int pad;
 };
 
 

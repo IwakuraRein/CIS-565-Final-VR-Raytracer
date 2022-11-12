@@ -36,7 +36,8 @@
 // clang-format off
 layout(set = S_ACCEL, binding = eTlas)					uniform accelerationStructureEXT topLevelAS;
 //
-layout(set = S_OUT,   binding = eStore)					uniform image2D			resultImage;
+layout(set = S_OUT,   binding = eDirectResult)					uniform image2D			directResultImage;
+layout(set = S_OUT,   binding = eIndirectResult)					uniform image2D			indirectResultImage;
 //
 layout(set = S_SCENE, binding = eInstData,	scalar)   buffer _InstanceInfo	{ InstanceData geoInfo[]; };
 layout(set = S_SCENE, binding = eCamera,	  scalar)   uniform _SceneCamera	{ SceneCamera sceneCamera; };

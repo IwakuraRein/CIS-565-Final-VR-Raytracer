@@ -36,7 +36,8 @@
 class RenderOutput
 {
 public:
-  Tonemapper m_tonemapper{
+  struct PushConstant {
+      Tonemapper tm{
       1.0f,          // brightness;
       1.0f,          // contrast;
       1.0f,          // saturation;
@@ -47,14 +48,16 @@ public:
       0,             // autoExposure;
       0.5f,          // Ywhite;  // Burning white
       0.5f,          // key;     // Log-average luminance
-  };
+      };
+      int debugging_mode;
+  } m_push;
 
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator);
   void destroy();
   void create(const VkExtent2D& size, const VkRenderPass& renderPass);
   void update(const VkExtent2D& size);
-  void run(VkCommandBuffer cmdBuf);
+  void run(VkCommandBuffer cmdBuf, int debugging_mode);
   void genMipmap(VkCommandBuffer cmdBuf);
 
   VkDescriptorSetLayout getDescLayout() { return m_postDescSetLayout; }
@@ -70,7 +73,9 @@ private:
   VkDescriptorSet       m_postDescSet{VK_NULL_HANDLE};
   VkPipeline            m_postPipeline{VK_NULL_HANDLE};
   VkPipelineLayout      m_postPipelineLayout{VK_NULL_HANDLE};
-  nvvk::Texture         m_offscreenColor;
+  //nvvk::Texture         m_offscreenColor;
+  nvvk::Texture         m_directResult;
+  nvvk::Texture         m_indirectResult;
   //VkFormat m_offscreenColorFormat{VkFormat::eR16G16B16A16Sfloat};  // Darkening the scene over 5000 iterations
   VkFormat m_offscreenColorFormat{VK_FORMAT_R32G32B32A32_SFLOAT};
   VkFormat m_offscreenDepthFormat{VK_FORMAT_X8_D24_UNORM_PACK32};  // Will be replaced by best supported format

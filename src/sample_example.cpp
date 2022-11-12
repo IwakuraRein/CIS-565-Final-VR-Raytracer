@@ -359,9 +359,9 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.m_tonemapper.zoom = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
-	m_offscreen.m_tonemapper.renderingRatio = size / area;
-	m_offscreen.run(cmdBuf);
+	m_offscreen.m_push.tm.zoom = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
+	m_offscreen.m_push.tm.renderingRatio = size / area;
+	m_offscreen.run(cmdBuf, m_rtxState.debugging_mode);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -406,7 +406,7 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 
 
 	// For automatic brightness tonemapping
-	if (m_offscreen.m_tonemapper.autoExposure)
+	if (m_offscreen.m_push.tm.autoExposure)
 	{
 		auto slot = profiler.timeRecurring("Mipmap", cmdBuf);
 		m_offscreen.genMipmap(cmdBuf);
