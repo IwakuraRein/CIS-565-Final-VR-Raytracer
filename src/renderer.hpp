@@ -23,10 +23,13 @@
 #include "nvvk/resourceallocator_vk.hpp"
 #include "nvvk/debug_util_vk.hpp"
 #include "nvvk/descriptorsets_vk.hpp"
-
 #include "nvvk/profiler_vk.hpp"
-#include "renderer.h"
+#include "nvmath/nvmath.h"
+
 #include "shaders/host_device.h"
+#include "scene.hpp"
+
+#include <array>
 
 /*
 
@@ -41,7 +44,7 @@ Creating the Compute ray query renderer
   - create
   - run
 */
-class RayQuery
+class Renderer
 {
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);

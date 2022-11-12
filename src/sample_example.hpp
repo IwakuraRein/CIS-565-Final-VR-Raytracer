@@ -21,7 +21,7 @@
 #pragma once
 #include "hdr_sampling.hpp"
 #include "nvvk/gizmos_vk.hpp"
-#include "renderer.h"
+#include "renderer.hpp"
 
  /*
 
@@ -63,7 +63,7 @@ typedef nvvk::ResourceAllocatorDedicated Allocator;
 
 #include "accelstruct.hpp"
 #include "render_output.hpp"
-#include "rayquery.hpp"
+#include "renderer.hpp"
 #include "scene.hpp"
 #include "shaders/host_device.h"
 
@@ -126,7 +126,7 @@ public:
 	nvvk::RayPickerKHR m_picker;
 
 	//std::unique_ptr<Renderer> m_pRender;
-	std::unique_ptr<RayQuery> m_pRender;
+	std::unique_ptr<Renderer> m_pRender;
 
 	nvvk::Buffer m_sunAndSkyBuffer;
 

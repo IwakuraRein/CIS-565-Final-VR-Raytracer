@@ -29,8 +29,7 @@
 #include "nvh/alignment.hpp"
 #include "nvh/fileoperations.hpp"
 #include "nvvk/shaders_vk.hpp"
-#include "rayquery.hpp"
-#include "scene.hpp"
+#include "renderer.hpp"
 #include "tools.hpp"
 
   // Shaders
@@ -38,7 +37,7 @@
 //--------------------------------------------------------------------------------------------------
 //
 //
-void RayQuery::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount)
+void Renderer::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount)
 {
 	m_device = device;
 	m_imageCount = imageCount;
@@ -50,7 +49,7 @@ void RayQuery::setup(const VkDevice& device, const VkPhysicalDevice& physicalDev
 //--------------------------------------------------------------------------------------------------
 //
 //
-void RayQuery::destroy()
+void Renderer::destroy()
 {
 	m_pAlloc->destroy(m_buffer[0]);
 	m_pAlloc->destroy(m_buffer[1]);
@@ -67,7 +66,7 @@ void RayQuery::destroy()
 //--------------------------------------------------------------------------------------------------
 // Creation of the RQ pipeline
 //
-void RayQuery::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> rtDescSetLayouts, Scene* scene)
+void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> rtDescSetLayouts, Scene* scene)
 {
 	MilliTimer timer;
 	LOGI("Create Ray Query Pipeline");
@@ -100,7 +99,7 @@ void RayQuery::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_pipeline);
 
-	m_debug.setObjectName(m_pipeline, "RayQuery");
+	m_debug.setObjectName(m_pipeline, "Renderer");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 
@@ -112,7 +111,7 @@ void RayQuery::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 // Executing the Ray Query compute shader
 //
 #define GROUP_SIZE 8  // Same group size as in compute shader
-void RayQuery::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
+void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
 {
 
 	// Preparing for the compute shader
@@ -129,7 +128,7 @@ void RayQuery::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 }
 
 // handle window resize
-void RayQuery::update(const VkExtent2D& size) {
+void Renderer::update(const VkExtent2D& size) {
 	if ((size.width * size.height) > m_bufferSize) {
 		m_bufferSize = size.width * size.height;
 		m_pAlloc->destroy(m_buffer[0]);
@@ -142,6 +141,10 @@ void RayQuery::update(const VkExtent2D& size) {
 		VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 			| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
+
+		m_dbi[0] = VkDescriptorBufferInfo{ m_buffer[0].buffer, 0, VK_WHOLE_SIZE };
+		m_dbi[1] = VkDescriptorBufferInfo{ m_buffer[1].buffer, 0, VK_WHOLE_SIZE };
+
 		std::array<VkWriteDescriptorSet, 2> writes;
 		writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_dbi[0]);
 		writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_dbi[1]);
@@ -152,7 +155,7 @@ void RayQuery::update(const VkExtent2D& size) {
 	}
 }
 
-void RayQuery::createDescriptorSet()
+void Renderer::createDescriptorSet()
 {
 	m_bind = nvvk::DescriptorSetBindings{};
 

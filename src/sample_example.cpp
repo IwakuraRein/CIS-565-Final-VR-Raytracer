@@ -26,7 +26,7 @@
 #define VMA_IMPLEMENTATION
 
 #include "shaders/host_device.h"
-#include "rayquery.hpp"
+#include "renderer.hpp"
 #include "sample_example.hpp"
 #include "sample_gui.hpp"
 #include "tools.hpp"
@@ -70,7 +70,7 @@ void SampleExample::setup(const VkInstance& instance,
 	m_skydome.setup(device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
 
 	// Create and setup all renderers
-	m_pRender.reset(new RayQuery);
+	m_pRender.reset(new Renderer);
 	m_pRender->setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc, m_swapChain.getImageCount());
 }
 
