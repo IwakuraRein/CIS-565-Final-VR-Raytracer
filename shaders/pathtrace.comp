@@ -132,16 +132,16 @@ void main() {
   // Saving pixel color
   if(rtxState.frame > 0) {
     // Do accumulation over time
-    vec3 old_color = imageLoad(directResultImage, imageCoords).xyz;
+    vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, directPixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(directResultImage, imageCoords, vec4(new_result, 1.f));
+    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1.f));
     
-    old_color = imageLoad(indirectResultImage, imageCoords).xyz;
+    old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
     new_result = mix(old_color, indirectPixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(indirectResultImage, imageCoords, vec4(new_result, 1.f));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 1.f));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(directResultImage, imageCoords, vec4(directPixelColor, 1.f));
-    imageStore(indirectResultImage, imageCoords, vec4(indirectPixelColor, 1.f));
+    imageStore(thisDirectResultImage, imageCoords, vec4(directPixelColor, 1.f));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(indirectPixelColor, 1.f));
   }
 }

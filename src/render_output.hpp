@@ -32,6 +32,7 @@
 #include "nvvk/descriptorsets_vk.hpp"
 #include "shaders/host_device.h"
 
+#include <array>
 
 class RenderOutput
 {
@@ -53,29 +54,32 @@ public:
   } m_push;
 
 public:
-  void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator);
+  void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);
   void destroy();
   void create(const VkExtent2D& size, const VkRenderPass& renderPass);
   void update(const VkExtent2D& size);
-  void run(VkCommandBuffer cmdBuf, int debugging_mode);
+  void run(VkCommandBuffer cmdBuf, const RtxState& state);
   void genMipmap(VkCommandBuffer cmdBuf);
 
   VkDescriptorSetLayout getDescLayout() { return m_postDescSetLayout; }
-  VkDescriptorSet       getDescSet() { return m_postDescSet; }
+  VkDescriptorSet getDescSet(const RtxState& state) { return m_postDescSet[(state.frame + 1) % 2]; }
 
 private:
   void createOffscreenRender(const VkExtent2D& size);
   void createPostPipeline(const VkRenderPass& renderPass);
   void createPostDescriptor();
 
+  uint32_t m_imageCount;
+
+  nvvk::DescriptorSetBindings m_bind;
   VkDescriptorPool      m_postDescPool{VK_NULL_HANDLE};
   VkDescriptorSetLayout m_postDescSetLayout{VK_NULL_HANDLE};
-  VkDescriptorSet       m_postDescSet{VK_NULL_HANDLE};
+  std::array<VkDescriptorSet, 2> m_postDescSet{VK_NULL_HANDLE};
   VkPipeline            m_postPipeline{VK_NULL_HANDLE};
   VkPipelineLayout      m_postPipelineLayout{VK_NULL_HANDLE};
   //nvvk::Texture         m_offscreenColor;
-  nvvk::Texture         m_directResult;
-  nvvk::Texture         m_indirectResult;
+  std::array<nvvk::Texture, 2>         m_directResult;
+  std::array<nvvk::Texture, 2>         m_indirectResult;
   //VkFormat m_offscreenColorFormat{VkFormat::eR16G16B16A16Sfloat};  // Darkening the scene over 5000 iterations
   VkFormat m_offscreenColorFormat{VK_FORMAT_R32G32B32A32_SFLOAT};
   VkFormat m_offscreenDepthFormat{VK_FORMAT_X8_D24_UNORM_PACK32};  // Will be replaced by best supported format

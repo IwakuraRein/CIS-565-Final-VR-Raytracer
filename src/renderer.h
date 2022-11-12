@@ -25,6 +25,8 @@
 #include "nvmath/nvmath.h"
 #include "shaders/host_device.h"
 
+#include <array>
+
 // Forward declaration
 class Scene;
 
@@ -37,7 +39,7 @@ public:
                                   nvvk::ResourceAllocator* allocator)              = 0;
   virtual void              destroy()                                              = 0;
   virtual void              run(const VkCommandBuffer&              cmdBuf,
-                                const VkExtent2D&                   size,
+                                const RtxState&                   state,
                                 nvvk::ProfilerVK&                   profiler,
                                 std::vector<VkDescriptorSet> extraDescSets) = 0;
   virtual void              create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> extraDescSetsLayout, Scene* _scene = nullptr) = 0;

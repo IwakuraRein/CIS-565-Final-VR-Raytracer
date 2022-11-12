@@ -208,6 +208,7 @@ int main(int argc, char** argv)
 			ImGui::NewFrame();
 
 			// Start rendering the scene
+			while (sample.m_busy);
 			profiler.beginFrame();  // GPU performance timer
 			sample.prepareFrame();  // Waits for a framebuffer to be available
 			sample.updateFrame();   // Increment/update rendering frame count

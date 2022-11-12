@@ -38,9 +38,10 @@
 //--------------------------------------------------------------------------------------------------
 //
 //
-void RayQuery::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator)
+void RayQuery::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount)
 {
 	m_device = device;
+	m_imageCount = imageCount;
 	m_pAlloc = allocator;
 	m_queueIndex = familyIndex;
 	m_debug.setup(device);
@@ -51,7 +52,8 @@ void RayQuery::setup(const VkDevice& device, const VkPhysicalDevice& physicalDev
 //
 void RayQuery::destroy()
 {
-	m_pAlloc->destroy(m_buffer);
+	m_pAlloc->destroy(m_buffer[0]);
+	m_pAlloc->destroy(m_buffer[1]);
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
@@ -75,8 +77,10 @@ void RayQuery::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 
 	// Create Gbuffer
 	m_bufferSize = size.width * size.height;
-	m_buffer = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	NAME_VK(m_buffer.buffer);
+	m_buffer[0] = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	NAME_VK(m_buffer[0].buffer);
+	m_buffer[1] = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	NAME_VK(m_buffer[1].buffer);
 	createDescriptorSet();
 	rtDescSetLayouts.push_back(m_descSetLayout);
 
@@ -108,10 +112,11 @@ void RayQuery::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 // Executing the Ray Query compute shader
 //
 #define GROUP_SIZE 8  // Same group size as in compute shader
-void RayQuery::run(const VkCommandBuffer& cmdBuf, const VkExtent2D& size, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
+void RayQuery::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
 {
+
 	// Preparing for the compute shader
-	descSets.push_back(m_descSet);
+	descSets.push_back(m_descSet[(state.frame + 1) % 2]);
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
 	vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0,
 		static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
@@ -120,40 +125,55 @@ void RayQuery::run(const VkCommandBuffer& cmdBuf, const VkExtent2D& size, nvvk::
 	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &m_state);
 
 	// Dispatching the shader
-	vkCmdDispatch(cmdBuf, (size.width + (GROUP_SIZE - 1)) / GROUP_SIZE, (size.height + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 }
 
 // handle window resize
 void RayQuery::update(const VkExtent2D& size) {
 	if ((size.width * size.height) > m_bufferSize) {
 		m_bufferSize = size.width * size.height;
-		m_pAlloc->destroy(m_buffer);
-		m_buffer = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		NAME_VK(m_buffer.buffer);
+		m_pAlloc->destroy(m_buffer[0]);
+		m_pAlloc->destroy(m_buffer[1]);
+		m_buffer[0] = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		NAME_VK(m_buffer[0].buffer);
+		m_buffer[1] = m_pAlloc->createBuffer(sizeof(GeomData) * m_bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		NAME_VK(m_buffer[1].buffer);
 
 		VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 			| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		nvvk::DescriptorSetBindings bind;
-		bind.addBinding({ RayQBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
-		VkDescriptorBufferInfo dbi{ m_buffer.buffer, 0, VK_WHOLE_SIZE };
-		VkWriteDescriptorSet write = bind.makeWrite(m_descSet, RayQBindings::eGbuffer, &dbi);
-		vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+
+		std::array<VkWriteDescriptorSet, 2> writes;
+		writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_dbi[0]);
+		writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_dbi[1]);
+		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+		writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_dbi[1]);
+		writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_dbi[0]);
+		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	}
 }
 
 void RayQuery::createDescriptorSet()
 {
+	m_bind = nvvk::DescriptorSetBindings{};
+
 	VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 		| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-	nvvk::DescriptorSetBindings bind;
-	bind.addBinding({ RayQBindings::eGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	m_bind.addBinding({ RayQBindings::eLastGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	m_bind.addBinding({ RayQBindings::eThisGbuffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 
-	m_descPool = bind.createPool(m_device, 1);
-	CREATE_NAMED_VK(m_descSetLayout, bind.createLayout(m_device));
-	CREATE_NAMED_VK(m_descSet, nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
+	m_descPool = m_bind.createPool(m_device, m_descSet.size());
+	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
+	CREATE_NAMED_VK(m_descSet[0], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
+	CREATE_NAMED_VK(m_descSet[1], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 
-	VkDescriptorBufferInfo dbi{ m_buffer.buffer, 0, VK_WHOLE_SIZE };
-	VkWriteDescriptorSet write = bind.makeWrite(m_descSet, RayQBindings::eGbuffer, &dbi);
-	vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+	m_dbi[0] = VkDescriptorBufferInfo{ m_buffer[0].buffer, 0, VK_WHOLE_SIZE };
+	m_dbi[1] = VkDescriptorBufferInfo{ m_buffer[1].buffer, 0, VK_WHOLE_SIZE };
 
+	std::array<VkWriteDescriptorSet, 2> writes;
+	writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_dbi[0]);
+	writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_dbi[1]);
+	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_dbi[1]);
+	writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_dbi[0]);
+	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }

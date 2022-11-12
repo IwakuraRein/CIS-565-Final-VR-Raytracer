@@ -69,8 +69,10 @@ END_ENUM();
 START_ENUM(OutputBindings)
 eDirectSampler = 0,  // As sampler
 eIndirectSampler = 1,  // As sampler
-eDirectResult = 2,   // As storage
-eIndirectResult = 3   // As storage
+eLastDirectResult = 2,   // As storage
+eLastIndirectResult = 3,   // As storage
+eThisDirectResult = 4,   // As storage
+eThisIndirectResult = 5   // As storage
 END_ENUM();
 
 // Scene Data - Set 2
@@ -93,7 +95,8 @@ END_ENUM();
 
 // Ray Query - Set 4
 START_ENUM(RayQBindings)
-eGbuffer = 0
+eLastGbuffer = 0,
+eThisGbuffer = 1
 END_ENUM();
 
 START_ENUM(DebugMode)
