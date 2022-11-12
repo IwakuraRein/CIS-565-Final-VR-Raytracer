@@ -200,7 +200,7 @@ struct GeomData {
 	uint matIndex;
 	vec3 position;
 	//12
-	vec3 color; //vertex color
+	vec3 vertColor; //vertex color
 	float pad;
 };
 

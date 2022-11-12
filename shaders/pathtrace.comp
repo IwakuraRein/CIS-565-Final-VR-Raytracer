@@ -99,16 +99,13 @@ void main() {
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     State state;
-    BsdfSampleRec bsdfSampleRec;
-    bool directSample;
-    vec3 radiance = DirectSample(ray, state, bsdfSampleRec, directSample);
-    if(rtxState.debugging_mode == eIndirectResult) {
-      radiance = vec3(0);
-    }
-    if(rtxState.debugging_mode == eIndirectResult || 
-      rtxState.debugging_mode == eNoDebug) {
-      radiance += IndirectSample(ray, state, bsdfSampleRec, directSample);
-    }
+    float firstHitT;
+    
+    vec3 radiance = DirectSample(ray, state, firstHitT);
+    if (rtxState.debugging_mode == eIndirectResult) 
+      radiance = IndirectSample(ray, state, firstHitT);
+    else if (rtxState.debugging_mode == eNoDebug)
+      radiance += IndirectSample(ray, state, firstHitT);
 
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold) {

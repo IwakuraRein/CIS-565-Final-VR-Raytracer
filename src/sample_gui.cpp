@@ -135,8 +135,8 @@ bool SampleGUI::guiRayTracing()
 	changed |= GuiH::Selection("Debug Mode", "Display unique values of material", &rtxState.debugging_mode, nullptr, Normal,
 		{
 			"No Debug",
-			"Direct Light",
-			"Indirect Light",
+			"Direct Stage",
+			"Indirect Stage",
 			"BaseColor",
 			"Normal",
 			"Metallic",

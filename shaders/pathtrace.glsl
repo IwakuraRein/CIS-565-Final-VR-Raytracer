@@ -254,131 +254,7 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
   return dirAndPdf;
 }
 
-vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec, out bool directSample) {
-  // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
-  //   TrigLight light = trigLights[id];
-  //   vec3 v0 = light.v0;
-  //   vec3 v1 = light.v1;
-  //   vec3 v2 = light.v2;
-
-  //   vec3 r0 = v0-r.origin;
-  //   vec3 r1 = v1-r.origin;
-  //   vec3 r2 = v2-r.origin;
-
-  //   float cos0 = dot(normalize(r0), r.direction);
-  //   float cos1 = dot(normalize(r1), r.direction);
-  //   float cos2 = dot(normalize(r2), r.direction);
-
-  //   float sin0 = sqrt(1-cos0*cos0);
-  //   float sin1 = sqrt(1-cos1*cos1);
-  //   float sin2 = sqrt(1-cos2*cos2);
-
-  //   if (length(r0)*sin0 <= 0.1) return vec3(0, 1, 0);
-  //   if (length(r1)*sin1 <= 0.1) return vec3(0, 1, 0);
-  //   if (length(r2)*sin2 <= 0.1) return vec3(0, 1, 0);
-  // }
-  // TODO: write to gbuffer
-  ClosestHit(r);
-  if(prd.hitT >= INFINITY) {
-    state.position = vec3(INFINITY) + abs(r.origin);
-
-    vec3 env;
-    if(_sunAndSky.in_use == 1)
-      env = sun_and_sky(_sunAndSky, r.direction);
-    else {
-      vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
-      env = texture(environmentTexture, uv).rgb;
-    }
-      // Done sampling return
-    return (env * rtxState.hdrMultiplier);
-  }
-
-  ShadeState sstate = GetShadeState(prd);
-  GeomData gData;
-  state.position = sstate.position;
-  gData.position = sstate.position;
-  state.normal = sstate.normal;
-  gData.normal = sstate.normal;
-  state.tangent = sstate.tangent_u[0];
-  gData.tangent = sstate.tangent_u[0];
-  state.bitangent = sstate.tangent_v[0];
-  state.texCoord = sstate.text_coords[0];
-  gData.texCoord = sstate.text_coords[0];
-  state.matID = sstate.matIndex;
-  gData.matIndex = sstate.matIndex;
-  state.isEmitter = false;
-  state.specularBounce = false;
-  state.isSubsurface = false;
-  state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
-
-  state.vertColor = sstate.color;
-  gData.color = sstate.color;
-
-  // Filling material structures
-  GetMaterialsAndTextures(state, r);
-
-  // Color at vertices
-  state.mat.albedo *= sstate.color;
-  gbuffer[rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = gData;
-
-  if(state.mat.unlit) {
-    return state.mat.albedo;
-  }
-
-  if(rtxState.debugging_mode > eIndirectResult/* && rtxState.debugging_mode < eWeight*/)
-    return DebugInfo(state);
-
-  if(rand(prd.seed) < (1.0 - state.mat.roughness * 2.0)) {
-    directSample = false;
-    return vec3(0.0);
-  }
-
-  directSample = true;
-
-  vec4 dirAndPdf;
-  vec3 Li = vec3(0.0);
-  float dist = INFINITY;
-  float rnd = rand(prd.seed);
-
-  if(rnd < rtxState.environmentProb) {
-    // Sample environment
-    dirAndPdf = EnvSample(Li);
-    if(dirAndPdf.w <= 0.0)
-      return /*state.mat.emission*/ vec3(0.0);
-    dirAndPdf.w *= rtxState.environmentProb;
-  } else {
-    if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
-      // Sample triangle mesh light
-      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
-      dirAndPdf.w *= lightBufInfo.trigSampProb;
-    } else {
-      // Sample point light
-      dirAndPdf = SamplePuncLight(state.position, Li, dist);
-      dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
-    }
-    if(dirAndPdf.w <= 0.0)
-      return /*state.mat.emission*/ vec3(0.0);
-
-    dirAndPdf.w *= (1.0 - rtxState.environmentProb);
-  }
-
-  Ray shadowRay;
-  // shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-  // float offset = length(state.position - shadowRay.origin) + 1e-4;
-  shadowRay.direction = dirAndPdf.xyz;
-  shadowRay.origin = state.position + shadowRay.direction * 1e-4;
-
-  bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
-
-  if(AnyHit(shadowRay, dist - 2e-4))
-    return /*state.mat.emission*/ vec3(0.0);
-  else
-    return Li * bsdfSampleRec.f *
-      max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
-}
-
-vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool directSample) {
-  float hitT = length(state.position - r.origin);
+vec3 IndirectSample(Ray r, State state, float hitT) {
   if(hitT >= INFINITY)
     return vec3(0.0);
   vec3 radiance = vec3(0.0);
@@ -387,14 +263,11 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
   for(int depth = 0; depth < rtxState.maxDepth; depth++) {
     if(depth > 0) {
       ClosestHit(r);
-
       hitT = prd.hitT;
 
       // Hitting the environment
       if(hitT >= INFINITY) {
-        if(depth == 1 && directSample)
-          return radiance;
-
+        if (depth == 1) return vec3(0.0);
         vec3 env;
         if(_sunAndSky.in_use == 1)
           env = sun_and_sky(_sunAndSky, r.direction);
@@ -402,7 +275,7 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
           vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
           env = texture(environmentTexture, uv).rgb;
         }
-          // Done sampling return
+            // Done sampling return
         return radiance + (env * rtxState.hdrMultiplier * throughput);
       }
 
@@ -434,7 +307,7 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
     }
 
     // Emissive material
-    if(depth != 1 || !directSample)
+    if (depth > 1)
       radiance += state.mat.emission * throughput;
 
     // KHR_materials_unlit
@@ -444,7 +317,10 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
 
     // Add absoption (transmission / volume)
     throughput *= exp(-absorption * hitT);
-    if(depth > 1) {
+
+    // add punc light
+    if (depth > 1)
+    {
       vec4 dirAndPdf;
       float dist, dummyPdf;
       vec3 Li;
@@ -459,6 +335,7 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
       }
     }
 
+    BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
 
@@ -487,19 +364,6 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
     r.direction = bsdfSampleRec.L;
     r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
 
-    // We are adding the contribution to the radiance only if the ray is not occluded by an object.
-    // This is done here to minimize live state across ray-trace calls.
-    // if(vcontrib.visible == true)
-    // {
-    //   // Shoot shadow ray up to the light (1e32 == environement)
-    //   Ray  shadowRay = Ray(r.origin, vcontrib.lightDir);
-    //   bool inShadow  = AnyHit(shadowRay, vcontrib.lightDist);
-    //   if(!inShadow)
-    //   {
-    //     radiance += vcontrib.radiance;
-    //   }
-    // }
-
 #ifdef RR
     if(rand(prd.seed) >= rrPcont)
       break;                // paths with low throughput that won't contribute
@@ -508,6 +372,162 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool direct
   }
 
   return radiance;
+}
+
+vec3 DirectSample(Ray r, out State state, out float firstHitT) {
+  // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
+  //   TrigLight light = trigLights[id];
+  //   vec3 v0 = light.v0;
+  //   vec3 v1 = light.v1;
+  //   vec3 v2 = light.v2;
+
+  //   vec3 r0 = v0-r.origin;
+  //   vec3 r1 = v1-r.origin;
+  //   vec3 r2 = v2-r.origin;
+
+  //   float cos0 = dot(normalize(r0), r.direction);
+  //   float cos1 = dot(normalize(r1), r.direction);
+  //   float cos2 = dot(normalize(r2), r.direction);
+
+  //   float sin0 = sqrt(1-cos0*cos0);
+  //   float sin1 = sqrt(1-cos1*cos1);
+  //   float sin2 = sqrt(1-cos2*cos2);
+
+  //   if (length(r0)*sin0 <= 0.1) return vec3(0, 1, 0);
+  //   if (length(r1)*sin1 <= 0.1) return vec3(0, 1, 0);
+  //   if (length(r2)*sin2 <= 0.1) return vec3(0, 1, 0);
+  // }
+  // TODO: write to gbuffer
+  ClosestHit(r);
+  firstHitT = prd.hitT;
+  if(prd.hitT >= INFINITY) {
+    // state.position = vec3(INFINITY) + abs(r.origin);
+
+    vec3 env;
+    if(_sunAndSky.in_use == 1)
+      env = sun_and_sky(_sunAndSky, r.direction);
+    else {
+      vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
+      env = texture(environmentTexture, uv).rgb;
+    }
+      // Done sampling return
+    return (env * rtxState.hdrMultiplier);
+  }
+
+  ShadeState sstate = GetShadeState(prd);
+  GeomData gData;
+  state.position = sstate.position;
+  gData.position = sstate.position;
+  state.normal = sstate.normal;
+  gData.normal = sstate.normal;
+  state.tangent = sstate.tangent_u[0];
+  gData.tangent = sstate.tangent_u[0];
+  state.bitangent = sstate.tangent_v[0];
+  state.texCoord = sstate.text_coords[0];
+  gData.texCoord = sstate.text_coords[0];
+  state.matID = sstate.matIndex;
+  gData.matIndex = sstate.matIndex;
+  state.isEmitter = false;
+  state.specularBounce = false;
+  state.isSubsurface = false;
+  state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+
+  state.vertColor = sstate.color;
+  gData.vertColor = sstate.color;
+
+  // Filling material structures
+  GetMaterialsAndTextures(state, r);
+
+  // Color at vertices
+  state.mat.albedo *= sstate.color;
+  gbuffer[rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = gData;
+
+  if(rtxState.debugging_mode > eIndirectResult)
+    return DebugInfo(state);
+
+  if(state.mat.unlit) {
+    return state.mat.albedo;
+  }
+
+  Ray shadowRay;
+  BsdfSampleRec bsdfSampleRec;
+  if(rand(prd.seed) > (1.0 - state.mat.roughness * 2.0)) { // importance sampling on light sources
+    vec4 dirAndPdf;
+    vec3 Li = vec3(0.0);
+    float dist = INFINITY;
+    float rnd = rand(prd.seed);
+    if(rnd < rtxState.environmentProb) {
+        // Sample environment
+      dirAndPdf = EnvSample(Li);
+      if(dirAndPdf.w <= 0.0)
+        return state.mat.emission;
+      dirAndPdf.w *= rtxState.environmentProb;
+    } else {
+      if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
+          // Sample triangle mesh light
+        dirAndPdf = SampleTriangleLight(state.position, Li, dist);
+        dirAndPdf.w *= lightBufInfo.trigSampProb;
+      } else {
+          // Sample point light
+        dirAndPdf = SamplePuncLight(state.position, Li, dist);
+        dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
+      }
+      if(dirAndPdf.w <= 0.0)
+        return state.mat.emission;
+
+      dirAndPdf.w *= (1.0 - rtxState.environmentProb);
+    }
+      // shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+      // float offset = length(state.position - shadowRay.origin) + 1e-4;
+    shadowRay.direction = dirAndPdf.xyz;
+    shadowRay.origin = state.position + shadowRay.direction * 1e-4;
+
+    if(AnyHit(shadowRay, dist - 2e-4))
+      return state.mat.emission;
+    else {
+      bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
+      return Li * bsdfSampleRec.f *
+        max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w + state.mat.emission;
+    }
+  } else { // importance sampling on brdf
+    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+
+    if(bsdfSampleRec.pdf > 0.0) {
+      vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+      shadowRay.direction = bsdfSampleRec.L;
+      shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+      ClosestHit(shadowRay);
+      if(prd.hitT >= INFINITY) {
+        vec3 env;
+        if(_sunAndSky.in_use == 1)
+          env = sun_and_sky(_sunAndSky, shadowRay.direction);
+        else {
+          vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
+          env = texture(environmentTexture, uv).rgb;
+        }
+        // Done sampling return
+        return state.mat.emission + (env * rtxState.hdrMultiplier) * throughput;
+      }
+      State state2;
+      sstate = GetShadeState(prd);
+      // state2.position = sstate.position;
+      // state2.normal = sstate.normal;
+      // state2.tangent = sstate.tangent_u[0];
+      // state2.bitangent = sstate.tangent_v[0];
+      // state2.texCoord = sstate.text_coords[0];
+      state2.matID = sstate.matIndex;
+      // state2.isEmitter = false;
+      // state2.specularBounce = false;
+      // state2.isSubsurface = false;
+      state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
+      // state2.vertColor = sstate.color;
+      GetMaterialsAndTextures(state2, shadowRay);
+
+      return state.mat.emission + state2.mat.emission * throughput;
+    } else {
+      return vec3(0.0);
+    }
+  }
 }
 
 //-----------------------------------------------------------------------
