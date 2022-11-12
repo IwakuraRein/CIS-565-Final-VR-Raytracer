@@ -106,10 +106,7 @@ eAlpha = 7,   //
 eRoughness = 8,   //
 eTexcoord = 9,   //
 eTangent = 10,   //
-eRadiance = 11,   //
-eWeight = 12,  //
-eRayDir = 13,  //
-eHeatmap = 14   //
+eHeatmap = 11   //
 END_ENUM();
 // clang-format on
 
@@ -203,7 +200,7 @@ struct GeomData {
 	uint matIndex;
 	vec3 position;
 	//12
-	vec3 color; //vertex color
+	vec3 vertColor; //vertex color
 	float pad;
 };
 
