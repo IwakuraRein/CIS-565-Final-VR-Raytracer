@@ -254,7 +254,7 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
   return dirAndPdf;
 }
 
-vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
+vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec, out bool directSample) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
   //   vec3 v0 = light.v0;
@@ -328,21 +328,26 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
   if(rtxState.debugging_mode > eIndirectResult/* && rtxState.debugging_mode < eWeight*/)
     return DebugInfo(state);
 
-  if(state.mat.roughness <= SPECULAR_THRESHOLD)
+  if(rand(prd.seed) < (1.0 - state.mat.roughness * 2.0)) {
+    directSample = false;
     return vec3(0.0);
+  }
+
+  directSample = true;
 
   vec4 dirAndPdf;
   vec3 Li = vec3(0.0);
   float dist = INFINITY;
+  float rnd = rand(prd.seed);
 
-  if(rand(prd.seed) < rtxState.environmentProb) {
+  if(rnd < rtxState.environmentProb) {
     // Sample environment
     dirAndPdf = EnvSample(Li);
     if(dirAndPdf.w <= 0.0)
       return /*state.mat.emission*/ vec3(0.0);
     dirAndPdf.w *= rtxState.environmentProb;
   } else {
-    if(rand(prd.seed) < lightBufInfo.trigSampProb) {
+    if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
       // Sample triangle mesh light
       dirAndPdf = SampleTriangleLight(state.position, Li, dist);
       dirAndPdf.w *= lightBufInfo.trigSampProb;
@@ -372,17 +377,34 @@ vec3 DirectSample(Ray r, out State state, out BsdfSampleRec bsdfSampleRec) {
       max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w/* + state.mat.emission*/;
 }
 
-vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
+vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec, bool directSample) {
+  float hitT = length(state.position - r.origin);
+  if(hitT >= INFINITY)
+    return vec3(0.0);
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
-
   for(int depth = 0; depth < rtxState.maxDepth; depth++) {
-    float hitT;
-    if(depth == 0) {
-      hitT = length(state.position - r.origin);
-    } else {
+    if(depth > 0) {
       ClosestHit(r);
+
+      hitT = prd.hitT;
+
+      // Hitting the environment
+      if(hitT >= INFINITY) {
+        if(depth == 1 && directSample)
+          return radiance;
+
+        vec3 env;
+        if(_sunAndSky.in_use == 1)
+          env = sun_and_sky(_sunAndSky, r.direction);
+        else {
+          vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
+          env = texture(environmentTexture, uv).rgb;
+        }
+          // Done sampling return
+        return radiance + (env * rtxState.hdrMultiplier * throughput);
+      }
 
       // Get Position, Normal, Tangents, Texture Coordinates, Color
       ShadeState sstate = GetShadeState(prd);
@@ -401,23 +423,6 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
 
       // Filling material structures
       GetMaterialsAndTextures(state, r);
-
-      hitT = prd.hitT;
-    }
-    // Hitting the environment
-    if(hitT >= INFINITY) {
-      if(depth <= 1 && state.mat.roughness > SPECULAR_THRESHOLD)
-        return radiance;
-
-      vec3 env;
-      if(_sunAndSky.in_use == 1)
-        env = sun_and_sky(_sunAndSky, r.direction);
-      else {
-        vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
-        env = texture(environmentTexture, uv).rgb;
-      }
-        // Done sampling return
-      return radiance + (env * rtxState.hdrMultiplier * throughput);
     }
 
     // Color at vertices
@@ -429,8 +434,8 @@ vec3 IndirectSample(Ray r, State state, BsdfSampleRec bsdfSampleRec) {
     }
 
     // Emissive material
-    if(depth != 1 || state.mat.roughness > SPECULAR_THRESHOLD)
-      radiance += state.mat.emission * throughput; // ignore direct light
+    if(depth != 1 || !directSample)
+      radiance += state.mat.emission * throughput;
 
     // KHR_materials_unlit
     if(state.mat.unlit) {

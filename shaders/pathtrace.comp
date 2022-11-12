@@ -100,13 +100,14 @@ void main() {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     State state;
     BsdfSampleRec bsdfSampleRec;
-    vec3 radiance = DirectSample(ray, state, bsdfSampleRec);
+    bool directSample;
+    vec3 radiance = DirectSample(ray, state, bsdfSampleRec, directSample);
     if(rtxState.debugging_mode == eIndirectResult) {
       radiance = vec3(0);
     }
     if(rtxState.debugging_mode == eIndirectResult || 
       rtxState.debugging_mode == eNoDebug) {
-      radiance += IndirectSample(ray, state, bsdfSampleRec);
+      radiance += IndirectSample(ray, state, bsdfSampleRec, directSample);
     }
 
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
