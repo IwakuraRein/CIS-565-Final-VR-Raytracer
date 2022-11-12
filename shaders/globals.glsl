@@ -29,6 +29,8 @@
 #define INFINITY 1e32
 #define EPS 0.0001
 
+#define SPECULAR_THRESHOLD 0.1
+
 //precision highp int;
 precision highp float;
 
@@ -112,6 +114,7 @@ struct State
   vec3 tangent;
   vec3 bitangent;
   vec2 texCoord;
+  vec3 vertColor;
 
   bool isEmitter;
   bool specularBounce;

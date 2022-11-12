@@ -29,6 +29,7 @@
 #include "nvvk/images_vk.hpp"
 #include "nvvk/resourceallocator_vk.hpp"
 #include "shaders/host_device.h"
+#include "tools.hpp"
 
 //--------------------------------------------------------------------------------------------------
 // Load an environment image (HDR) and create an acceleration structure for
@@ -60,6 +61,6 @@ private:
   float m_average{1.f};
 
 
-  float                 buildAliasmap(const std::vector<float>& data, std::vector<EnvAccel>& accel);
-  std::vector<EnvAccel> createEnvironmentAccel(const float* pixels, VkExtent2D& size);
+  float                 buildAliasmap(const std::vector<float>& data, std::vector<ImptSampData>& accel);
+  std::vector<ImptSampData> createEnvironmentAccel(const float* pixels, VkExtent2D& size);
 };

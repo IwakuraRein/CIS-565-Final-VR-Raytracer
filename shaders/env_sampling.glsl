@@ -51,7 +51,7 @@ vec3 Environment_sample(sampler2D lat_long_tex, in vec3 randVal, out vec3 to_lig
   // emitted radiance and the average of the environment map, the texel alias,
   // the probability distribution function (PDF) values for that texel and its
   // alias
-  EnvAccel sample_data = envSamplingData[idx];
+  ImptSampData sample_data = envSamplingData[idx];
 
   uint env_idx;
 
