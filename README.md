@@ -12,4 +12,5 @@ This is the final project for [CIS 565 2022](https://cis565-fall-2022.github.io/
 
 - [ ] Direct Light Sampling with ReSTIR
 - [ ] Global Illumination with ReSTIR
+- [ ] Radiance Cache
 - [ ] Displacement Map
