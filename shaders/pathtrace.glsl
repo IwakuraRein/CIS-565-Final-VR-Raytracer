@@ -267,7 +267,8 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
       // Hitting the environment
       if(hitT >= INFINITY) {
-        if (depth == 1) return vec3(0.0);
+        if(depth == 1)
+          return vec3(0.0);
         vec3 env;
         if(_sunAndSky.in_use == 1)
           env = sun_and_sky(_sunAndSky, r.direction);
@@ -307,7 +308,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     }
 
     // Emissive material
-    if (depth > 1)
+    if(depth > 1)
       radiance += state.mat.emission * throughput;
 
     // KHR_materials_unlit
@@ -319,8 +320,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     throughput *= exp(-absorption * hitT);
 
     // add punc light
-    if (depth > 1)
-    {
+    if(depth > 1) {
       vec4 dirAndPdf;
       float dist, dummyPdf;
       vec3 Li;
@@ -451,7 +451,9 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
 
   Ray shadowRay;
   BsdfSampleRec bsdfSampleRec;
+  float pdfMultiplier = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) > (1.0 - state.mat.roughness * 2.0)) { // importance sampling on light sources
+
     vec4 dirAndPdf;
     vec3 Li = vec3(0.0);
     float dist = INFINITY;
@@ -459,6 +461,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
     if(rnd < rtxState.environmentProb) {
         // Sample environment
       dirAndPdf = EnvSample(Li);
+      dirAndPdf.w *= pdfMultiplier;
       if(dirAndPdf.w <= 0.0)
         return state.mat.emission;
       dirAndPdf.w *= rtxState.environmentProb;
@@ -472,6 +475,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
         dirAndPdf = SamplePuncLight(state.position, Li, dist);
         dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
       }
+      dirAndPdf.w *= pdfMultiplier;
       if(dirAndPdf.w <= 0.0)
         return state.mat.emission;
 
@@ -523,7 +527,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
       // state2.vertColor = sstate.color;
       GetMaterialsAndTextures(state2, shadowRay);
 
-      return state.mat.emission + state2.mat.emission * throughput;
+      return state.mat.emission + state2.mat.emission * throughput / (1.0 - pdfMultiplier);
     } else {
       return vec3(0.0);
     }
