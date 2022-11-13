@@ -117,7 +117,7 @@ void main() {
       hdr = texture(inIndirectImage, uvCoords * tm.zoom).rgba;
     else
       hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, uvCoords * tm.zoom).rgba;
-
+    hdr.w = 1.0;
     if(((tm.autoExposure >> 0) & 1) == 1) {
       vec4 avg; // Get the average value of the image
       if(debugging_mode == eDirectStage)
@@ -126,6 +126,7 @@ void main() {
         avg = textureLod(inIndirectImage, vec2(0.5), 20);
       else
         avg = (textureLod(inDirectImage, vec2(0.5), 20) + textureLod(inIndirectImage, vec2(0.5), 20));
+      avg.w = 1.0;
       float avgLum2 = luminance(avg.rgb);                  // Find the luminance
       if(((tm.autoExposure >> 1) & 1) == 1)
         hdr.rgb = toneLocalExposure(hdr.rgb, avgLum2);  // Adjust exposure
