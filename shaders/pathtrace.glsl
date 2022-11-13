@@ -298,26 +298,153 @@ vec3 DirectLight(in Ray r, in State state) {
   }
 }
 
-bool UpdateSample(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption){
+bool UpdateSample(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
+
+    // Reset absorption when ray is going out of surface
+  if(dot(state.normal, state.ffnormal) > 0.0) {
+    absorption = vec3(0.0);
+  }
+
+  // Emissive material
+  radiance += state.mat.emission * throughput;
+
+  // KHR_materials_unlit
+  if(state.mat.unlit) {
+    radiance += state.mat.albedo * throughput;
+    return false;
+  }
+
+  // Add absoption (transmission / volume)
+  throughput *= exp(-absorption * prd.hitT);
+
+  // add direct light
+  radiance += DirectLight(r, state) * throughput;
+
+  BsdfSampleRec bsdfSampleRec;
+    // Sampling for the next ray
+  bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+
+    // Set absorption only if the ray is currently inside the object.
+  if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
+    absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
+  }
+
+  if(bsdfSampleRec.pdf > 0.0) {
+    throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+  } else {
+    return false;
+  }
+
+  // Next ray
+  r.direction = bsdfSampleRec.L;
+  r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+
+  return true;
+}
+
+bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
+
+  // Reset absorption when ray is going out of surface
+  if(dot(state.normal, state.ffnormal) > 0.0) {
+    absorption = vec3(0.0);
+  }
+
+  // KHR_materials_unlit
+  if(state.mat.unlit) {
+    radiance += state.mat.albedo * throughput;
+    return false;
+  }
+
+  // Add absoption (transmission / volume)
+  throughput *= exp(-absorption * prd.hitT);
+
+  BsdfSampleRec bsdfSampleRec;
+  // Sampling for the next ray
+  bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+
+    // Set absorption only if the ray is currently inside the object.
+  if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
+    absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
+  }
+
+  if(bsdfSampleRec.pdf > 0.0) {
+    throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+  } else {
+    return false;
+  }
+
+  // Next ray
+  r.direction = bsdfSampleRec.L;
+  r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+
   return true;
 }
 
 vec3 IndirectSample(Ray r, State state, float hitT) {
   if(hitT >= INFINITY)
     return vec3(0.0);
+  prd.hitT = hitT;
   vec3 radiance = vec3(0.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
 
-  for(int depth = 1; depth < rtxState.maxDepth; depth++) {
-    if(depth > 0) {
+  { // first intersection
+    if(!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
+      return radiance;
+#ifdef RR
+    // For Russian-Roulette (minimizing live state)
+    float rrPcont = (0 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
+    if(rand(prd.seed) >= rrPcont)
+      return radiance;                // paths with low throughput that won't contribute
+    throughput /= rrPcont;  // boost the energy of the non-terminated paths
+#endif
+  }
+
+  { // first bounce
+    ClosestHit(r);
+
+    // Hitting the environment
+    if(prd.hitT >= INFINITY) {
+      return radiance;
+    }
+
+    // Get Position, Normal, Tangents, Texture Coordinates, Color
+    ShadeState sstate = GetShadeState(prd);
+    state.position = sstate.position;
+    state.normal = sstate.normal;
+    state.tangent = sstate.tangent_u[0];
+    state.bitangent = sstate.tangent_v[0];
+    state.texCoord = sstate.text_coords[0];
+    state.matID = sstate.matIndex;
+    state.position = sstate.position;
+    state.isEmitter = false;
+    state.specularBounce = false;
+    state.isSubsurface = false;
+    state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+
+    // Filling material structures
+    GetMaterialsAndTextures(state, r);
+    // Color at vertices
+    state.mat.albedo *= sstate.color;
+
+    if(!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
+      return radiance;
+
+#ifdef RR
+    // For Russian-Roulette (minimizing live state)
+    float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
+    if(rand(prd.seed) >= rrPcont)
+      return radiance;                // paths with low throughput that won't contribute
+    throughput /= rrPcont;  // boost the energy of the non-terminated paths
+#endif
+  }
+
+  { // second bounce and more
+    for(int depth = 2; depth < rtxState.maxDepth; depth++) {
       ClosestHit(r);
-      hitT = prd.hitT;
 
       // Hitting the environment
-      if(hitT >= INFINITY) {
-        if(depth == 1)
-          return vec3(0.0);
+      if(prd.hitT >= INFINITY) {
         vec3 env;
         if(_sunAndSky.in_use == 1)
           env = sun_and_sky(_sunAndSky, r.direction);
@@ -325,7 +452,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
           vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
           env = texture(environmentTexture, uv).rgb;
         }
-            // Done sampling return
+        // Done sampling return
         return radiance + (env * rtxState.hdrMultiplier * throughput);
       }
 
@@ -337,71 +464,28 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
       state.bitangent = sstate.tangent_v[0];
       state.texCoord = sstate.text_coords[0];
       state.matID = sstate.matIndex;
-      state.vertColor = sstate.color;
       state.position = sstate.position;
       state.isEmitter = false;
       state.specularBounce = false;
       state.isSubsurface = false;
       state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
 
-      // Filling material structures
+        // Filling material structures
       GetMaterialsAndTextures(state, r);
+      // Color at vertices
+      state.mat.albedo *= sstate.color;
+
+      if(!UpdateSample(r, state, radiance, throughput, absorption))
+        return radiance;
+
+  #ifdef RR
+      // For Russian-Roulette (minimizing live state)
+      float rrPcont = (depth >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
+      if(rand(prd.seed) >= rrPcont)
+        return radiance;                // paths with low throughput that won't contribute
+      throughput /= rrPcont;  // boost the energy of the non-terminated paths
+  #endif
     }
-
-    // Color at vertices
-    state.mat.albedo *= state.vertColor;
-
-    // Reset absorption when ray is going out of surface
-    if(dot(state.normal, state.ffnormal) > 0.0) {
-      absorption = vec3(0.0);
-    }
-
-    // Emissive material
-    if(depth > 1)
-      radiance += state.mat.emission * throughput;
-
-    // KHR_materials_unlit
-    if(state.mat.unlit) {
-      return radiance + state.mat.albedo * throughput;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * hitT);
-
-    // add direct light
-    if(depth > 1) {
-      radiance += DirectLight(r, state) * throughput;
-    }
-
-    BsdfSampleRec bsdfSampleRec;
-    // Sampling for the next ray
-    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
-
-    // Set absorption only if the ray is currently inside the object.
-    if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-      absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
-    }
-
-    if(bsdfSampleRec.pdf > 0.0) {
-      throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
-    } else {
-      break;
-    }
-
-#ifdef RR
-    // For Russian-Roulette (minimizing live state)
-    float rrPcont = (depth >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
-#endif
-
-    // Next ray
-    r.direction = bsdfSampleRec.L;
-    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-
-#ifdef RR
-    if(rand(prd.seed) >= rrPcont)
-      break;                // paths with low throughput that won't contribute
-    throughput /= rrPcont;  // boost the energy of the non-terminated paths
-#endif
   }
 
   return radiance;
@@ -465,9 +549,6 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   state.isSubsurface = false;
   state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
 
-  state.vertColor = sstate.color;
-  gData.vertColor = sstate.color;
-
   // Filling material structures
   GetMaterialsAndTextures(state, r);
 
@@ -520,7 +601,6 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
       // state2.specularBounce = false;
       // state2.isSubsurface = false;
       state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
-      // state2.vertColor = sstate.color;
       GetMaterialsAndTextures(state2, shadowRay);
 
       return state2.mat.emission * throughput / (1.0 - lightsourceProb);
