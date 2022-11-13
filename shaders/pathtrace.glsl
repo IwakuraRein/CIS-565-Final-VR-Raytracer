@@ -318,7 +318,10 @@ bool UpdateSample(inout Ray r, in State state, inout vec3 radiance, inout vec3 t
   throughput *= exp(-absorption * prd.hitT);
 
   // add direct light
-  radiance += DirectLight(r, state) * throughput;
+  float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
+  if(rand(prd.seed) < lightsourceProb) // importance sampling on light sources
+    radiance += DirectLight(r, state) * throughput / lightsourceProb;
+  
 
   BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
@@ -384,7 +387,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
   if(hitT >= INFINITY)
     return vec3(0.0);
   prd.hitT = hitT;
-  vec3 radiance = vec3(0.0);
+  vec3 radiance = state.mat.emission;
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
 
@@ -567,7 +570,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   // else let random number decide
   float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-    return DirectLight(r, state) / lightsourceProb + state.mat.emission;
+    return DirectLight(r, state) / lightsourceProb;
   } else { // importance sampling on brdf
     Ray shadowRay;
     BsdfSampleRec bsdfSampleRec;
