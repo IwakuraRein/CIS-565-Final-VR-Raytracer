@@ -284,12 +284,12 @@ vec3 DirectLight(in Ray r, in State state) {
   }
   Ray shadowRay;
   BsdfSampleRec bsdfSampleRec;
-  // shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-  // float offset = length(state.position - shadowRay.origin) + 1e-4;
+  shadowRay.origin = OffsetRay(state.position, state.ffnormal);
   shadowRay.direction = dirAndPdf.xyz;
-  shadowRay.origin = state.position + shadowRay.direction * 1e-4;
 
-  if(AnyHit(shadowRay, dist - 2e-4))
+  if(AnyHit(shadowRay, dist - abs(shadowRay.origin.x - state.position.x) -
+   abs(shadowRay.origin.y - state.position.y) - 
+   abs(shadowRay.origin.z - state.position.z)))
     return vec3(0.0);
   else {
     bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
@@ -535,7 +535,6 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   }
 
   ShadeState sstate = GetShadeState(prd);
-  GeomData gData;
   state.position = sstate.position;
   state.normal = sstate.normal;
   state.tangent = sstate.tangent_u[0];
@@ -553,7 +552,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   // Color at vertices
   state.mat.albedo *= sstate.color;
   // Normal, Albedo, TexCoord, Material ID
-  imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), packUnorm4x8(vec4(state.mat.albedo, 1.0)), packUnorm2x16(state.texCoord), state.matID));
+  //imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), packUnorm4x8(vec4(state.mat.albedo, 1.0)), packUnorm2x16(state.texCoord), state.matID));
 
   if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);

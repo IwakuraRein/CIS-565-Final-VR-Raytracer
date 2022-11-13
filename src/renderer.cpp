@@ -180,10 +180,10 @@ void Renderer::createGbufferImage()
 
 void Renderer::createDescriptorSet()
 {
-	if (m_descPool != VK_NULL_HANDLE)
-		vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
-	if (m_descSetLayout != VK_NULL_HANDLE)
-		vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
+	//if (m_descPool != VK_NULL_HANDLE)
+	//	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
+	//if (m_descSetLayout != VK_NULL_HANDLE)
+	//	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 	m_bind = nvvk::DescriptorSetBindings{};
 
 	VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
