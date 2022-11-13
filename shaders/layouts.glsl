@@ -54,8 +54,10 @@ layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky 
 layout(set = S_ENV, binding = eHdr)						uniform sampler2D		environmentTexture;
 layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ ImptSampData envSamplingData[]; };
 
-layout(set = S_RAYQ, binding = eLastGbuffer,  scalar)		buffer _LastGbuffer	{ GeomData lastGbuffer[]; };
-layout(set = S_RAYQ, binding = eThisGbuffer,  scalar)		buffer _ThisGbuffer	{ GeomData thisGbuffer[]; };
+// layout(set = S_RAYQ, binding = eLastGbuffer,  scalar)		buffer _LastGbuffer	{ GeomData lastGbuffer[]; };
+// layout(set = S_RAYQ, binding = eThisGbuffer,  scalar)		buffer _ThisGbuffer	{ GeomData thisGbuffer[]; };
+layout(set = S_RAYQ, binding = eLastGbuffer)		uniform uimage2D lastGbuffer; 
+layout(set = S_RAYQ, binding = eThisGbuffer)		uniform uimage2D thisGbuffer; 
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

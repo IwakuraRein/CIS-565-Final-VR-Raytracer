@@ -48,6 +48,7 @@ layout(push_constant) uniform _RtxState {
 
 PtPayload prd;
 ShadowHitPayload shadow_payload;
+ivec2 imageCoords;
 
 #include "layouts.glsl"
 #include "random.glsl"
@@ -85,7 +86,7 @@ void main() {
   // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
 
   ivec2 imageRes = rtxState.size;
-  ivec2 imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  /*ivec2*/ imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
 
   // Initialize the seed for the random number only once once
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));

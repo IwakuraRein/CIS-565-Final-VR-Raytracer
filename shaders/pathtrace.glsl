@@ -537,16 +537,11 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   ShadeState sstate = GetShadeState(prd);
   GeomData gData;
   state.position = sstate.position;
-  gData.position = sstate.position;
   state.normal = sstate.normal;
-  gData.normal = sstate.normal;
   state.tangent = sstate.tangent_u[0];
-  gData.tangent = sstate.tangent_u[0];
   state.bitangent = sstate.tangent_v[0];
   state.texCoord = sstate.text_coords[0];
-  gData.texCoord = sstate.text_coords[0];
   state.matID = sstate.matIndex;
-  gData.matIndex = sstate.matIndex;
   state.isEmitter = false;
   state.specularBounce = false;
   state.isSubsurface = false;
@@ -557,7 +552,8 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
 
   // Color at vertices
   state.mat.albedo *= sstate.color;
-  thisGbuffer[rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x] = gData;
+  // Normal, Albedo, TexCoord, Material ID
+  imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), packUnorm4x8(vec4(state.mat.albedo, 1.0)), packUnorm2x16(state.texCoord), state.matID));
 
   if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);

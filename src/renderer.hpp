@@ -24,6 +24,7 @@
 #include "nvvk/debug_util_vk.hpp"
 #include "nvvk/descriptorsets_vk.hpp"
 #include "nvvk/profiler_vk.hpp"
+#include "nvvk/images_vk.hpp"
 #include "nvmath/nvmath.h"
 
 #include "shaders/host_device.h"
@@ -53,6 +54,7 @@ public:
   void              run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets);
   const std::string name() { return std::string("RQ"); }
   void update(const VkExtent2D& size);
+  void createGbufferImage();
   void createDescriptorSet();
   void setPushContants(const RtxState& state) { m_state = state; }
 
@@ -69,14 +71,17 @@ private:
   VkDevice                 m_device{VK_NULL_HANDLE};
   uint32_t                 m_queueIndex{0};
 
-  std::array<nvvk::Buffer, 2> m_buffer;
-  uint m_bufferSize;
+  //std::array<nvvk::Buffer, 2> m_buffer;
+  std::array<nvvk::Texture, 2> m_gbuffer;
+  // Normal, Albedo, TexCoord, Material ID
+  VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
   nvvk::DescriptorSetBindings m_bind;
-  std::array<VkDescriptorBufferInfo, 2> m_dbi;
   VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
   VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
   std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
 
   VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
   VkPipeline       m_pipeline{VK_NULL_HANDLE};
+
+  VkExtent2D m_size{};
 };
