@@ -96,15 +96,14 @@ void main() {
 
   vec3 directPixelColor = vec3(0);
   vec3 indirectPixelColor = vec3(0);
-
+  float depth;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     State state;
-    float firstHitT;
     
-    vec3 directRadiance = DirectSample(ray, state, firstHitT);
+    vec3 directRadiance = DirectSample(ray, state, depth);
 
-    vec3 indirectRadiance = IndirectSample(ray, state, firstHitT);
+    vec3 indirectRadiance = IndirectSample(ray, state, depth);
 
     float lum = dot(directRadiance + indirectRadiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold) {
@@ -134,14 +133,14 @@ void main() {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, directPixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1.f));
+    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, depth));
     
     old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
     new_result = mix(old_color, indirectPixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 1.f));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, depth));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisDirectResultImage, imageCoords, vec4(directPixelColor, 1.f));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(indirectPixelColor, 1.f));
+    imageStore(thisDirectResultImage, imageCoords, vec4(directPixelColor, depth));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(indirectPixelColor, depth));
   }
 }

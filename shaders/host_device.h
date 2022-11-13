@@ -105,12 +105,13 @@ eDirectStage = 1, //
 eIndirectStage = 2, //
 eBaseColor = 3,   //
 eNormal = 4,   //
-eMetallic = 5,   //
-eEmissive = 6,   //
-eAlpha = 7,   //
-eRoughness = 8,   //
-eTexcoord = 9,   //
-eTangent = 10   //
+eDepth = 5,    //
+eMetallic = 6,   //
+eEmissive = 7,   //
+eAlpha = 8,   //
+eRoughness = 9,   //
+eTexcoord = 10,   //
+eTangent = 11   //
 // eHeatmap = 11   //
 END_ENUM();
 // clang-format on

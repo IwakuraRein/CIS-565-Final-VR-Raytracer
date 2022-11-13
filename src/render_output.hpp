@@ -38,7 +38,10 @@ class RenderOutput
 {
 public:
   struct PushConstant {
-      Tonemapper tm{
+      Tonemapper tm;
+      int debugging_mode;
+  } m_push;
+  Tonemapper m_tm{
       1.0f,          // brightness;
       1.0f,          // contrast;
       1.0f,          // saturation;
@@ -49,16 +52,19 @@ public:
       0,             // autoExposure;
       0.5f,          // Ywhite;  // Burning white
       0.5f,          // key;     // Log-average luminance
-      };
-      int debugging_mode;
-  } m_push;
+  };
+  Tonemapper m_depthTm{
+        0.0f,          // exposure;
+        2.2f,          // gamma;
+        0.0f,          // alpha;
+  };
 
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);
   void destroy();
   void create(const VkExtent2D& size, const VkRenderPass& renderPass);
   void update(const VkExtent2D& size);
-  void run(VkCommandBuffer cmdBuf, const RtxState& state);
+  void run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom, vec2 ratio);
   void genMipmap(VkCommandBuffer cmdBuf);
 
   VkDescriptorSetLayout getDescLayout() { return m_postDescSetLayout; }

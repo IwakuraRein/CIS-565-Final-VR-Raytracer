@@ -359,9 +359,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.m_push.tm.zoom = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
-	m_offscreen.m_push.tm.renderingRatio = size / area;
-	m_offscreen.run(cmdBuf, m_rtxState);
+	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);

@@ -98,8 +98,16 @@ vec3 toneLocalExposure(vec3 RGB, float logAvgLum) {
 }
 
 void main() {
-  if(debugging_mode > eIndirectStage)
-    fragColor = texture(inDirectImage, uvCoords * tm.zoom);
+  if (debugging_mode == eDepth){
+    float depth = texture(inDirectImage, uvCoords * tm.zoom).w;
+    depth *= pow(2, tm.brightness);
+    depth += tm.saturation;
+    depth = clamp(pow(depth, 1.0 / tm.contrast), 0.f, 1.f);
+    fragColor = vec4(depth, depth, depth, 1.0);
+  }
+  else if(debugging_mode > eIndirectStage) {
+    fragColor = vec4(texture(inDirectImage, uvCoords * tm.zoom).xyz, 1.0);
+  }
   else {
     // Raw result of ray tracing
     vec4 hdr;
@@ -145,6 +153,6 @@ void main() {
     color *= 1.0 - dot(uv, uv) * tm.vignette;
 
     fragColor.xyz = color;
-    fragColor.a = hdr.a;
+    fragColor.w = 1.0;
   }
 }
