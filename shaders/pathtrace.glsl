@@ -361,6 +361,11 @@ bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radianc
   // Add absoption (transmission / volume)
   throughput *= exp(-absorption * prd.hitT);
 
+  // add direct light
+  float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
+  if (rand(prd.seed) < lightsourceProb) // importance sampling on light sources
+      radiance += DirectLight(r, state) * throughput / lightsourceProb;
+
   BsdfSampleRec bsdfSampleRec;
   // Sampling for the next ray
   bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
@@ -383,16 +388,56 @@ bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radianc
   return true;
 }
 
+bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
+
+    // Reset absorption when ray is going out of surface
+    if (dot(state.normal, state.ffnormal) > 0.0) {
+        absorption = vec3(0.0);
+    }
+
+    // KHR_materials_unlit
+    if (state.mat.unlit) {
+        radiance += state.mat.albedo * throughput;
+        return false;
+    }
+
+    // Add absoption (transmission / volume)
+    throughput *= exp(-absorption * prd.hitT);
+
+    BsdfSampleRec bsdfSampleRec;
+    // Sampling for the next ray
+    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+
+    // Set absorption only if the ray is currently inside the object.
+    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
+        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
+    }
+
+    if (bsdfSampleRec.pdf > 0.0) {
+        throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+    }
+    else {
+        return false;
+    }
+
+    // Next ray
+    r.direction = bsdfSampleRec.L;
+    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+
+    return true;
+}
+
 vec3 IndirectSample(Ray r, State state, float hitT) {
   if(hitT >= INFINITY)
     return vec3(0.0);
   prd.hitT = hitT;
-  vec3 radiance = state.mat.emission;
+  vec3 radiance = /*state.mat.emission*/ vec3(0.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
 
   { // first intersection
-    if(!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
+    // we don't want to reintroduce the luminance that direct stage has already done
+    if(!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption))
       return radiance;
 #ifdef RR
     // For Russian-Roulette (minimizing live state)
@@ -403,7 +448,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 #endif
   }
 
-  { // first bounce
+  { // second intersection
     ClosestHit(r);
 
     // Hitting the environment
@@ -430,6 +475,8 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     // Color at vertices
     state.mat.albedo *= sstate.color;
 
+    // Save as above. we don't want to reintroduce the first direct lighting
+    // but second direct lighting is allowed
     if(!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
       return radiance;
 
@@ -473,7 +520,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
       state.isSubsurface = false;
       state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
 
-        // Filling material structures
+       // Filling material structures
       GetMaterialsAndTextures(state, r);
       // Color at vertices
       state.mat.albedo *= sstate.color;
@@ -558,14 +605,14 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
     return DebugInfo(state);
 
   if(state.mat.unlit) {
-    return state.mat.albedo;
+    return state.mat.emission + state.mat.albedo;
   }
 
   // if roughness > 0.5, sample light sources only
   // else let random number decide
   float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-    return DirectLight(r, state) / lightsourceProb;
+    return state.mat.emission + DirectLight(r, state) / lightsourceProb;
   } else { // importance sampling on brdf
     Ray shadowRay;
     BsdfSampleRec bsdfSampleRec;
@@ -601,9 +648,9 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
       state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
       GetMaterialsAndTextures(state2, shadowRay);
 
-      return state2.mat.emission * throughput / (1.0 - lightsourceProb);
+      return state.mat.emission + state2.mat.emission * throughput / (1.0 - lightsourceProb);
     } else {
-      return vec3(0.0);
+      return state.mat.emission;
     }
   }
 }
