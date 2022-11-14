@@ -38,37 +38,26 @@ class RenderOutput
 {
 public:
   struct PushConstant {
-      Tonemapper tm;
+      Tonemapper tm{
+        0.0f,          // alpha;
+        2.2f,          // gamma;
+        0.0f,          // exposure;
+      };
+      float zoom;
+      vec2 renderingRatio;
       int debugging_mode;
   } m_push;
-  Tonemapper m_tm{
-      1.0f,          // brightness;
-      1.0f,          // contrast;
-      1.0f,          // saturation;
-      0.0f,          // vignette;
-      1.0f,          // avgLum;
-      1.0f,          // zoom;
-      {1.0f, 1.0f},  // renderingRatio;
-      0,             // autoExposure;
-      0.5f,          // Ywhite;  // Burning white
-      0.5f,          // key;     // Log-average luminance
-  };
-  Tonemapper m_depthTm{
-        0.0f,          // exposure;
-        2.2f,          // gamma;
-        0.0f,          // alpha;
-  };
 
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);
   void destroy();
   void create(const VkExtent2D& size, const VkRenderPass& renderPass);
   void update(const VkExtent2D& size);
-  void run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom, vec2 ratio);
+  void run(VkCommandBuffer cmdBuf, const RtxState& state, int frames, float zoom, vec2 ratio);
   void genMipmap(VkCommandBuffer cmdBuf);
 
   VkDescriptorSetLayout getDescLayout() { return m_postDescSetLayout; }
-  VkDescriptorSet getDescSet(const RtxState& state) { return m_postDescSet[(state.frame + 1) % 2]; }
+  VkDescriptorSet getDescSet(const RtxState& state, int frames) { return m_postDescSet[(frames + 1) % 2]; }
 
 private:
   void createOffscreenRender(const VkExtent2D& size);

@@ -57,6 +57,28 @@ INLINE uint32_t floatBitsToUint(float v)
   return u.out;
 };
 
+// compact hdr color to 32bit (y16u8v8)
+uint packUnormYUV(vec3 c) {
+  float y = 0.299 *c.x + 0.587*c.y + 0.114*c.z;
+  float u = 0.492*(c.y - y);
+  float v = 0.877*(c.x - y);
+  uint outVal = uint(y * 65535.0) << 16;
+  outVal += uint(u * 255.0) << 8;
+  outVal += uint(v * 255.0);
+  return outVal;
+}
+// compact hdr color to 32bit (y16u8v8)
+vec3 unpackUnormYUV(uint c) {
+  float y = float((c >> 16)) / 65535.0;
+  float u = float((c << 16) >> 24) / 255.0;
+  float v = float(c >> 24) / 255.0;
+
+  float r = v * 1.1402508552 + y;
+  float b = u * 2.0325203252 + y;
+  float g = y - 0.299 * r - 0.114 * b;
+  return vec3(r, g, b);
+}
+
 INLINE uint packUnorm4x8(vec4 const& v)
 {
   union

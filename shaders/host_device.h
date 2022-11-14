@@ -289,19 +289,9 @@ struct LightBufInfo {
 // Tonemapper used in post.frag
 struct Tonemapper
 {
-	float brightness;
-	float contrast;
-	float saturation;
-	float vignette;
-
-	float avgLum;
-	float zoom;
-	vec2  renderingRatio;
-
-	int   autoExposure;
-	float Ywhite;  // Burning white
-	float key;     // Log-average luminance
-	int pad;
+	float alpha;
+	float gamma;
+	float exposure;
 };
 
 

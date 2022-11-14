@@ -114,6 +114,7 @@ public:
 	void createRender();
 	void resetFrame();
 	void screenPicking();
+	void prepareFrame() override;
 	void updateFrame();
 	void updateHdrDescriptors();
 	void updateUniformBuffer(const VkCommandBuffer& cmdBuf);
@@ -186,6 +187,8 @@ public:
 		1,                    // physically_scaled_sun;
 		0,                    // in_use;
 	};
+
+	int m_totalFrame{ -1 };
 
 	int         m_maxFrames{ 100000 };
 	bool        m_showAxis{ true };
