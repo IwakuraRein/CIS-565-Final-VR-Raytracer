@@ -123,6 +123,7 @@ struct SceneCamera
 {
 	mat4  viewInverse;
 	mat4  projInverse;
+	mat4  projView;
 	float focalDist;
 	float aperture;
 	// Extra

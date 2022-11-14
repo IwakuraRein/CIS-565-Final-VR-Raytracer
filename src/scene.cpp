@@ -797,6 +797,7 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, float aspectRatio)
 	const auto  proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
 	m_camera.viewInverse = nvmath::invert(view);
 	m_camera.projInverse = nvmath::invert(proj);
+	m_camera.projView = nvmath::invert(proj * view);
 
 	// Focal is the interest point
 	nvmath::vec3f eye, center, up;

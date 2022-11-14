@@ -307,6 +307,15 @@ bool UpdateSample(inout Ray r, in State state, inout vec3 radiance, inout vec3 t
 
   // Emissive material
   radiance += state.mat.emission * throughput;
+  // add screenspace indirect
+  // TODO: seperate direct result to diffuse and glossy. we can only reuse diffuse radiance here
+  vec3 ndc = vec3(sceneCamera.projView * vec4(state.position, 1.0));
+  ivec2 coord = ivec2(round(ndc.x * rtxState.size.x), round(ndc.y * rtxState.size.y));
+  float z = 2.0 * ndc.z - 1.0;
+	z = 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z * (CAMERA_FAR - CAMERA_NEAR));
+  vec4 directResult = imageLoad(thisDirectResultImage, coord);
+  if (z <= (directResult.z + 1e-3));
+  radiance += directResult.xyz * throughput;
 
   // KHR_materials_unlit
   if(state.mat.unlit) {
