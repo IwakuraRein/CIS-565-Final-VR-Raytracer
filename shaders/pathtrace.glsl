@@ -256,7 +256,7 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
   return dirAndPdf;
 }
 
-vec3 DirectLight(in Ray r, in State state) {
+vec3 DirectLight(in Ray r, in State state) { // importance sample on light sources
   vec4 dirAndPdf;
   vec3 Li = vec3(0.0);
   float dist = INFINITY;
@@ -344,7 +344,6 @@ bool UpdateSample(inout Ray r, in State state, inout vec3 radiance, inout vec3 t
 
   return true;
 }
-
 bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
 
   // Reset absorption when ray is going out of surface
@@ -387,7 +386,6 @@ bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radianc
 
   return true;
 }
-
 bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
 
     // Reset absorption when ray is going out of surface
@@ -472,8 +470,8 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
     // Filling material structures
     GetMaterialsAndTextures(state, r);
-    // Color at vertices
-    state.mat.albedo *= sstate.color;
+    // we don't use vertex color cause there isn't enough room for it in the Gbuffer
+    // state.mat.albedo *= sstate.color;
 
     // Save as above. we don't want to reintroduce the first direct lighting
     // but second direct lighting is allowed
@@ -523,7 +521,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
        // Filling material structures
       GetMaterialsAndTextures(state, r);
       // Color at vertices
-      state.mat.albedo *= sstate.color;
+      // state.mat.albedo *= sstate.color;
 
       if(!UpdateSample(r, state, radiance, throughput, absorption))
         return radiance;
@@ -541,7 +539,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
   return radiance;
 }
 
-vec3 DirectSample(Ray r, out State state, out float firstHitT) {
+vec3 DirectSample(Ray r, out float firstHitT) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
   //   vec3 v0 = light.v0;
@@ -564,7 +562,6 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   //   if (length(r1)*sin1 <= 0.1) return vec3(0, 1, 0);
   //   if (length(r2)*sin2 <= 0.1) return vec3(0, 1, 0);
   // }
-  // TODO: write to gbuffer
   ClosestHit(r);
   firstHitT = prd.hitT;
   if(prd.hitT >= INFINITY) {
@@ -580,7 +577,7 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
       // Done sampling return
     return (env * rtxState.hdrMultiplier);
   }
-
+  State state;
   ShadeState sstate = GetShadeState(prd);
   state.position = sstate.position;
   state.normal = sstate.normal;
@@ -597,9 +594,9 @@ vec3 DirectSample(Ray r, out State state, out float firstHitT) {
   GetMaterialsAndTextures(state, r);
 
   // Color at vertices
-  state.mat.albedo *= sstate.color;
-  // Normal, Albedo, TexCoord, Material ID
-  //imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), packUnorm4x8(vec4(state.mat.albedo, 1.0)), packUnorm2x16(state.texCoord), state.matID));
+  // state.mat.albedo *= sstate.color;
+  // Normal, Tangent, TexCoord, Material ID
+  imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), compress_unit_vec(state.tangent), packUnorm2x16(state.texCoord), state.matID));
 
   if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);

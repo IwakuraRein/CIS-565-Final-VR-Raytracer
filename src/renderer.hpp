@@ -56,7 +56,6 @@ public:
   void update(const VkExtent2D& size);
   void createGbufferImage();
   void createDescriptorSet();
-  void setPushContants(const RtxState& state) { m_state = state; }
 
 private:
   uint32_t m_nbHit{0};
@@ -65,7 +64,6 @@ private:
 private:
   // Setup
 
-  RtxState m_state{};
   nvvk::ResourceAllocator* m_pAlloc{nullptr};  // Allocator for buffer, images, acceleration structures
   nvvk::DebugUtil          m_debug;            // Utility to name objects
   VkDevice                 m_device{VK_NULL_HANDLE};
@@ -73,7 +71,7 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
-  // Normal, Albedo, TexCoord, Material ID
+  // Normal, Tangent, TexCoord, Material ID
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
   nvvk::DescriptorSetBindings m_bind;
   VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
@@ -81,7 +79,8 @@ private:
   std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
 
   VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
-  VkPipeline       m_pipeline{VK_NULL_HANDLE};
+  VkPipeline       m_directPipeline{VK_NULL_HANDLE};
+  VkPipeline       m_indirectPipeline{VK_NULL_HANDLE};
 
   VkExtent2D m_size{};
 };

@@ -34,7 +34,8 @@
 #include "tools.hpp"
 
   // Shaders
-#include "autogen/pathtrace.comp.h"
+#include "autogen/direct_stage.comp.h"
+#include "autogen/indirect_stage.comp.h"
 //--------------------------------------------------------------------------------------------------
 //
 //
@@ -57,11 +58,13 @@ void Renderer::destroy()
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
-	vkDestroyPipeline(m_device, m_pipeline, nullptr);
+	vkDestroyPipeline(m_device, m_directPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_indirectPipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 
 	m_pipelineLayout = VK_NULL_HANDLE;
-	m_pipeline = VK_NULL_HANDLE;
+	m_directPipeline = VK_NULL_HANDLE;
+	m_indirectPipeline = VK_NULL_HANDLE;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -92,15 +95,20 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	VkComputePipelineCreateInfo computePipelineCreateInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
 	computePipelineCreateInfo.layout = m_pipelineLayout;
 	computePipelineCreateInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, pathtrace_comp, sizeof(pathtrace_comp));
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, direct_stage_comp, sizeof(direct_stage_comp));
 	computePipelineCreateInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 	computePipelineCreateInfo.stage.pName = "main";
 
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_pipeline);
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_directPipeline);
 
-	m_debug.setObjectName(m_pipeline, "Renderer");
+	m_debug.setObjectName(m_directPipeline, "Renderer-Direct");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
 
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
+
+	m_debug.setObjectName(m_indirectPipeline, "RendererIndirect");
+	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 	timer.print();
 }
@@ -115,14 +123,17 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 
 	// Preparing for the compute shader
 	descSets.push_back(m_descSet[(state.frame + 1) % 2]);
-	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
 	vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0,
 		static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
 	// Sending the push constant information
-	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &m_state);
+	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &state);
 
 	// Dispatching the shader
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 }
 

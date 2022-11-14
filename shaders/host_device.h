@@ -117,6 +117,8 @@ END_ENUM();
 // clang-format on
 
 // Camera of the scene
+#define CAMERA_NEAR 0.001f
+#define CAMERA_FAR 100000.0f
 struct SceneCamera
 {
 	mat4  viewInverse;
@@ -195,17 +197,6 @@ struct GltfShadeMaterial
 	uint sheen;
 	int  pad;
 	// 52
-};
-
-// Gbuffer
-struct GeomData {
-	vec3 normal;
-	vec3 tangent;
-	vec2 texCoord;
-	//8
-	uint matIndex;
-	vec3 position;
-	//12
 };
 
 // Use with PushConstant

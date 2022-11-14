@@ -794,7 +794,7 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 void Scene::updateCamera(const VkCommandBuffer& cmdBuf, float aspectRatio)
 {
 	const auto& view = CameraManip.getMatrix();
-	const auto  proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, 0.001f, 100000.0f);
+	const auto  proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
 	m_camera.viewInverse = nvmath::invert(view);
 	m_camera.projInverse = nvmath::invert(proj);
 
