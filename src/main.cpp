@@ -50,8 +50,8 @@ static int const SAMPLE_HEIGHT = 1080;
 int main(int argc, char** argv)
 {
 	InputParser parser(argc, argv);
-	std::string sceneFile = parser.getString("-f", "pica/scene.gltf");
-	std::string hdrFilename = parser.getString("-e", "daytime.hdr");
+	std::string sceneFile = parser.getString("-f", "robot_toon/robot-toon.gltf");
+	std::string hdrFilename = parser.getString("-e", "std_env.hdr");
 
 	// Setup GLFW window
 	glfwSetErrorCallback(onErrorCallback);
@@ -208,6 +208,7 @@ int main(int argc, char** argv)
 			ImGui::NewFrame();
 
 			// Start rendering the scene
+			while (sample.m_busy);
 			profiler.beginFrame();  // GPU performance timer
 			sample.prepareFrame();  // Waits for a framebuffer to be available
 			sample.updateFrame();   // Increment/update rendering frame count

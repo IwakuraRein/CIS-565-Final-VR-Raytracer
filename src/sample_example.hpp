@@ -21,7 +21,7 @@
 #pragma once
 #include "hdr_sampling.hpp"
 #include "nvvk/gizmos_vk.hpp"
-#include "renderer.h"
+#include "renderer.hpp"
 
  /*
 
@@ -63,6 +63,7 @@ typedef nvvk::ResourceAllocatorDedicated Allocator;
 
 #include "accelstruct.hpp"
 #include "render_output.hpp"
+#include "renderer.hpp"
 #include "scene.hpp"
 #include "shaders/host_device.h"
 
@@ -124,6 +125,7 @@ public:
 	nvvk::AxisVK       m_axis;
 	nvvk::RayPickerKHR m_picker;
 
+	//std::unique_ptr<Renderer> m_pRender;
 	std::unique_ptr<Renderer> m_pRender;
 
 	nvvk::Buffer m_sunAndSkyBuffer;
@@ -151,7 +153,7 @@ public:
 
 	RtxState m_rtxState{
 		0,       // frame;
-		8,       // maxDepth;
+		4,       // maxDepth;
 		1,       // samples per pixel;
 		1,       // fireflyClampThreshold;
 

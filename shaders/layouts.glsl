@@ -36,15 +36,17 @@
 // clang-format off
 layout(set = S_ACCEL, binding = eTlas)					uniform accelerationStructureEXT topLevelAS;
 //
-layout(set = S_OUT,   binding = eStore)					uniform image2D			resultImage;
+layout(set = S_OUT,   binding = eLastDirectResult)					uniform image2D			lastDirectResultImage;
+layout(set = S_OUT,   binding = eLastIndirectResult)					uniform image2D			lastIndirectResultImage;
+
+layout(set = S_OUT,   binding = eThisDirectResult)					uniform image2D			thisDirectResultImage;
+layout(set = S_OUT,   binding = eThisIndirectResult)					uniform image2D			thisIndirectResultImage;
 //
 layout(set = S_SCENE, binding = eInstData,	scalar)   buffer _InstanceInfo	{ InstanceData geoInfo[]; };
 layout(set = S_SCENE, binding = eCamera,	  scalar)   uniform _SceneCamera	{ SceneCamera sceneCamera; };
-// layout(set = S_SCENE, binding = eGbuffer,	  scalar)   buffer _Gbuffer	{ GeomData Gbuffer[]; };
 layout(set = S_SCENE, binding = eMaterials,	scalar)		buffer _MaterialBuffer	{ GltfShadeMaterial materials[]; };
 layout(set = S_SCENE, binding = ePuncLights,scalar)		buffer _PuncLights		{ PuncLight puncLights[]; };
 layout(set = S_SCENE, binding = eTrigLights,scalar)		buffer _TrigLights		{ TrigLight trigLights[]; };
-// layout(set = S_SCENE, binding = eTrigLightTransforms,scalar)  uniform _TrigLightTransforms { mat4 trigLightTransforms[16]; };
 layout(set = S_SCENE, binding = eLightBufInfo     )		uniform _LightBufInfo		{ LightBufInfo lightBufInfo; };
 layout(set = S_SCENE, binding = eTextures         )   uniform sampler2D		texturesMap[]; 
 //
@@ -52,7 +54,10 @@ layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky 
 layout(set = S_ENV, binding = eHdr)						uniform sampler2D		environmentTexture;
 layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ ImptSampData envSamplingData[]; };
 
-layout(set = S_RAYQ, binding = eGbuffer,  scalar)		buffer _Gbuffer	{ GeomData gbuffer[]; };
+// layout(set = S_RAYQ, binding = eLastGbuffer,  scalar)		buffer _LastGbuffer	{ GeomData lastGbuffer[]; };
+// layout(set = S_RAYQ, binding = eThisGbuffer,  scalar)		buffer _ThisGbuffer	{ GeomData thisGbuffer[]; };
+layout(set = S_RAYQ, binding = eLastGbuffer)		uniform uimage2D lastGbuffer; 
+layout(set = S_RAYQ, binding = eThisGbuffer)		uniform uimage2D thisGbuffer; 
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

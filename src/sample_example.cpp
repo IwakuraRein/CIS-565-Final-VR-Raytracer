@@ -26,7 +26,7 @@
 #define VMA_IMPLEMENTATION
 
 #include "shaders/host_device.h"
-#include "rayquery.hpp"
+#include "renderer.hpp"
 #include "sample_example.hpp"
 #include "sample_gui.hpp"
 #include "tools.hpp"
@@ -66,12 +66,12 @@ void SampleExample::setup(const VkInstance& instance,
 	m_scene.setup(m_device, physicalDevice, queues[eGCT1], &m_alloc);
 
 	// Transfer queues can be use for the creation of the following assets
-	m_offscreen.setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
+	m_offscreen.setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc, m_swapChain.getImageCount());
 	m_skydome.setup(device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
 
 	// Create and setup all renderers
-	m_pRender.reset(new RayQuery);
-	m_pRender->setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc);
+	m_pRender.reset(new Renderer);
+	m_pRender->setup(m_device, physicalDevice, queues[eTransfer].familyIndex, &m_alloc, m_swapChain.getImageCount());
 }
 
 
@@ -359,9 +359,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.m_tonemapper.zoom = m_descaling ? 1.0f / m_descalingLevel : 1.0f;
-	m_offscreen.m_tonemapper.renderingRatio = size / area;
-	m_offscreen.run(cmdBuf);
+	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -401,12 +399,12 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 	// State is the push constant structure
 	m_pRender->setPushContants(m_rtxState);
 	// Running the renderer
-	m_pRender->run(cmdBuf, render_size, profiler,
-		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(), m_scene.getDescSet(), m_descSet });
+	m_pRender->run(cmdBuf, m_rtxState, profiler,
+		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState), m_scene.getDescSet(), m_descSet });
 
 
 	// For automatic brightness tonemapping
-	if (m_offscreen.m_tonemapper.autoExposure)
+	if (m_offscreen.m_push.tm.autoExposure)
 	{
 		auto slot = profiler.timeRecurring("Mipmap", cmdBuf);
 		m_offscreen.genMipmap(cmdBuf);

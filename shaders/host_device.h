@@ -67,8 +67,12 @@ END_ENUM();
 
 // Output image - Set 1
 START_ENUM(OutputBindings)
-eSampler = 0,  // As sampler
-eStore = 1   // As storage
+eDirectSampler = 0,  // As sampler
+eIndirectSampler = 1,  // As sampler
+eLastDirectResult = 2,   // As storage
+eLastIndirectResult = 3,   // As storage
+eThisDirectResult = 4,   // As storage
+eThisIndirectResult = 5   // As storage
 END_ENUM();
 
 // Scene Data - Set 2
@@ -91,22 +95,24 @@ END_ENUM();
 
 // Ray Query - Set 4
 START_ENUM(RayQBindings)
-eGbuffer = 0
+eLastGbuffer = 0,
+eThisGbuffer = 1
 END_ENUM();
 
 START_ENUM(DebugMode)
 eNoDebug = 0,   //
-eDirectResult = 1, //
-eIndirectResult = 2, //
+eDirectStage = 1, //
+eIndirectStage = 2, //
 eBaseColor = 3,   //
 eNormal = 4,   //
-eMetallic = 5,   //
-eEmissive = 6,   //
-eAlpha = 7,   //
-eRoughness = 8,   //
-eTexcoord = 9,   //
-eTangent = 10,   //
-eHeatmap = 11   //
+eDepth = 5,    //
+eMetallic = 6,   //
+eEmissive = 7,   //
+eAlpha = 8,   //
+eRoughness = 9,   //
+eTexcoord = 10,   //
+eTangent = 11   //
+// eHeatmap = 11   //
 END_ENUM();
 // clang-format on
 
@@ -200,8 +206,6 @@ struct GeomData {
 	uint matIndex;
 	vec3 position;
 	//12
-	vec3 vertColor; //vertex color
-	float pad;
 };
 
 // Use with PushConstant
@@ -297,12 +301,15 @@ struct Tonemapper
 	float contrast;
 	float saturation;
 	float vignette;
+
 	float avgLum;
 	float zoom;
 	vec2  renderingRatio;
+
 	int   autoExposure;
 	float Ywhite;  // Burning white
 	float key;     // Log-average luminance
+	int pad;
 };
 
 
