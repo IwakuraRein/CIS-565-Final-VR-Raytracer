@@ -167,10 +167,10 @@ void Renderer::update(const VkExtent2D& size) {
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 		writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_gbuffer[1].descriptor);
 		writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_gbuffer[0].descriptor);
-		writes[2] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
-		writes[3] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
-		writes[4] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
-		writes[5] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
+		writes[2] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
+		writes[3] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
+		writes[4] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
+		writes[5] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	//}
 }
