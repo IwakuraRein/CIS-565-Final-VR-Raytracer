@@ -96,7 +96,11 @@ END_ENUM();
 // Ray Query - Set 4
 START_ENUM(RayQBindings)
 eLastGbuffer = 0,
-eThisGbuffer = 1
+eThisGbuffer = 1,
+eLastDirectCache = 2,
+eLastIndirectCache = 3,
+eThisDirectCache = 4,
+eThisIndirectCache = 5
 END_ENUM();
 
 START_ENUM(DebugMode)
