@@ -179,21 +179,55 @@ bool SampleGUI::guiRayTracing()
 bool SampleGUI::guiTonemapper()
 {
 	static Tonemapper default_tm{
-		0.0f,          // alpha;
-		2.2f,          // gamma;
-		0.0f,          // exposure;
+		1.0f,          // brightness;
+		1.0f,          // contrast;
+		1.0f,          // saturation;
+		0.0f,          // vignette;
+		1.0f,          // avgLum;
+		1.0f,          // zoom;
+		{1.0f, 1.0f},  // renderingRatio;
+		0,             // autoExposure;
+		0.5f,          // Ywhite;  // Burning white
+		0.5f,          // key;     // Log-average luminance
 	};
 	static const float _zero{ 0.f }, _gamma{ 2.2f };
 
-	auto& tm = _se->m_offscreen.m_push.tm;
+	auto& tm = _se->m_offscreen.m_tm;
+	auto& depth_tm = _se->m_offscreen.m_depthTm;
 	bool           changed{ false };
+	std::bitset<8> b(tm.autoExposure);
 
-	GuiH::Slider("Exposure", "", &tm.exposure, &default_tm.exposure, GuiH::Flags::Normal, -10.f, 10.f);
-	GuiH::Slider("Gamma", "", &tm.gamma, &default_tm.gamma, GuiH::Flags::Normal, 0.01f, 5.f);
-	GuiH::Slider("Alpha", "", &tm.alpha, &default_tm.alpha, GuiH::Flags::Normal, -0.99f, 0.99f);
-	if (ImGui::SmallButton("Reset")) {
-		tm = default_tm;
+	bool autoExposure = b.test(0);
+
+	if (_se->m_rtxState.debugging_mode == eDepth) {
+		GuiH::Slider("Exposure", "", &depth_tm.brightness, &_zero, GuiH::Flags::Normal, -10.f, 10.f);
+		GuiH::Slider("Gamma", "", &depth_tm.contrast, &_gamma, GuiH::Flags::Normal, 0.01f, 5.f);
+		GuiH::Slider("Alpha", "", &depth_tm.saturation, &_zero, GuiH::Flags::Normal, -1.f, 1.f);
 	}
+	else {
+		GuiH::Checkbox("Auto Exposure", "Adjust exposure", (bool*)&autoExposure);
+		GuiH::Slider("Exposure", "Scene Exposure", &tm.avgLum, &default_tm.avgLum, GuiH::Flags::Normal, 0.001f, 5.00f);
+		GuiH::Slider("Brightness", "", &tm.brightness, &default_tm.brightness, GuiH::Flags::Normal, 0.0f, 2.0f);
+		GuiH::Slider("Contrast", "", &tm.contrast, &default_tm.contrast, GuiH::Flags::Normal, 0.0f, 2.0f);
+		GuiH::Slider("Saturation", "", &tm.saturation, &default_tm.saturation, GuiH::Flags::Normal, 0.0f, 5.0f);
+		GuiH::Slider("Vignette", "", &tm.vignette, &default_tm.vignette, GuiH::Flags::Normal, 0.0f, 2.0f);
+	}
+
+
+	if (autoExposure)
+	{
+		bool localExposure = b.test(1);
+		GuiH::Group<bool>("Auto Settings", true, [&] {
+			changed |= GuiH::Checkbox("Local", "", &localExposure);
+			changed |= GuiH::Slider("Burning White", "", &tm.Ywhite, &default_tm.Ywhite, GuiH::Flags::Normal, 0.0f, 1.0f);
+			changed |= GuiH::Slider("Brightness", "", &tm.key, &default_tm.key, GuiH::Flags::Normal, 0.0f, 1.0f);
+			b.set(1, localExposure);
+			return changed;
+			});
+	}
+	b.set(0, autoExposure);
+	tm.autoExposure = b.to_ulong();
+
 	return false;  // no need to restart the renderer
 }
 
@@ -345,6 +379,13 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 		collect.statTone.x += float(info.gpu.average / 1000.0f);
 		collect.statTone.y += float(info.cpu.average / 1000.0f);
 		collect.frameTime += 1000.0f / ImGui::GetIO().Framerate;
+
+		if (_se->m_offscreen.m_push.tm.autoExposure == 1)
+		{
+			profiler.getTimerInfo("Mipmap", info);
+			mipmapGen = float(info.gpu.average / 1000.0f);
+			//LOGI("Mipmap Generation: %.2fms\n", info.gpu.average / 1000.0f);
+		}
 	}
 
 	// Averaging display of the data every 0.5 seconds
@@ -363,6 +404,8 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 	ImGui::Text("Frame     [ms]: %2.3f", display.frameTime);
 	ImGui::Text("Render GPU/CPU [ms]: %2.3f  /  %2.3f", display.statRender.x, display.statRender.y);
 	ImGui::Text("Tone+UI GPU/CPU [ms]: %2.3f  /  %2.3f", display.statTone.x, display.statTone.y);
+	if (_se->m_offscreen.m_push.tm.autoExposure == 1)
+		ImGui::Text("Mipmap Gen: %2.3fms", mipmapGen);
 	ImGui::ProgressBar(display.statRender.x / display.frameTime);
 
 

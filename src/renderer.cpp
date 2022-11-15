@@ -118,10 +118,11 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 // Executing the Ray Query compute shader
 //
 #define GROUP_SIZE 8  // Same group size as in compute shader
-void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, int frames, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
+void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets)
 {
+
 	// Preparing for the compute shader
-	descSets.push_back(m_descSet[(frames + 1) % 2]);
+	descSets.push_back(m_descSet[(state.frame + 1) % 2]);
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
 	vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0,
 		static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);

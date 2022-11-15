@@ -187,10 +187,8 @@ void SampleExample::updateFrame()
 		fov = f;
 	}
 
-	if (m_rtxState.frame < m_maxFrames) {
+	if (m_rtxState.frame < m_maxFrames)
 		m_rtxState.frame++;
-		m_totalFrame++;
-	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -361,7 +359,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.run(cmdBuf, m_rtxState, m_totalFrame, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
+	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -400,9 +398,16 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 	m_rtxState.time = (uint)(std::chrono::duration<double>(std::chrono::steady_clock::now() - m_start_time).count() * 1000.0);
 
 	// Running the renderer
-	m_pRender->run(cmdBuf, m_rtxState, m_totalFrame, profiler,
-		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState, m_totalFrame), m_scene.getDescSet(), m_descSet });
+	m_pRender->run(cmdBuf, m_rtxState, profiler,
+		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState), m_scene.getDescSet(), m_descSet });
 
+
+	// For automatic brightness tonemapping
+	if (m_offscreen.m_push.tm.autoExposure)
+	{
+		auto slot = profiler.timeRecurring("Mipmap", cmdBuf);
+		m_offscreen.genMipmap(cmdBuf);
+	}
 }
 
 
@@ -485,12 +490,6 @@ void SampleExample::screenPicking()
 	auto& prim = m_scene.getScene().m_primMeshes[pr.instanceCustomIndex];
 	LOGI("Hit(%d): %s\n", pr.instanceCustomIndex, prim.name.c_str());
 	LOGI(" - PrimId(%d)\n", pr.primitiveID);
-}
-
-void SampleExample::prepareFrame()
-{
-	nvvk::AppBaseVk::prepareFrame();
-	// m_totalFrame++;
 }
 
 //--------------------------------------------------------------------------------------------------
