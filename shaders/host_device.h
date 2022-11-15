@@ -219,8 +219,11 @@ struct RtxState
 
 	ivec2 size;                   // rendering size
 	int   minHeatmap;             // Debug mode - heat map
+
 	int   maxHeatmap;
 	uint time;                   // How long has the app been running. miliseconds.
+	int descale;
+	int pad;
 };
 
 // Structure used for retrieving the primitive information in the closest hit

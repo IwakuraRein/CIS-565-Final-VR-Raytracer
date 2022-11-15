@@ -99,18 +99,18 @@ void main() {
   float depth;
   uint luminance;
   uint dir;
-  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
+  // for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
     vec3 radiance = DirectSample(ray, depth, luminance, dir);
 
-    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold) {
-      radiance *= rtxState.fireflyClampThreshold / lum;
-    }
+    // float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    // if(lum > rtxState.fireflyClampThreshold) {
+    //   radiance *= rtxState.fireflyClampThreshold / lum;
+    // }
     pixelColor += radiance;
-  }
-  pixelColor /= rtxState.spp;
+  // }
+  // pixelColor /= rtxState.spp;
 
   // Debug - Heatmap
   // if(rtxState.debugging_mode == eHeatmap) {

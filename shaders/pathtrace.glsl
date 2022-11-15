@@ -314,11 +314,11 @@ vec3 DirectLight(in Ray r, in State state) { // importance sample on light sourc
     dirAndPdf.w *= rtxState.environmentProb;
   } else {
     if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
-          // Sample triangle mesh light
+      // Sample triangle mesh light
       dirAndPdf = SampleTriangleLight(state.position, Li, dist);
       dirAndPdf.w *= lightBufInfo.trigSampProb;
     } else {
-          // Sample point light
+      // Sample point light
       dirAndPdf = SamplePuncLight(state.position, Li, dist);
       dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
     }
@@ -486,18 +486,22 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
   return true;
 }
 
-vec3 IndirectSample(Ray r, State state, float hitT) {
+vec3 IndirectSample(Ray r, State state, float hitT, out vec3 weight, out vec3 dir) {
   if(hitT >= INFINITY)
     return vec3(0.0);
   prd.hitT = hitT;
   vec3 radiance = /*state.mat.emission*/ vec3(0.0);
+  weight = vec3(1.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
 
   { // first intersection
     // we don't want to reintroduce the luminance that direct stage has already done
-    if(!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption))
+    if(!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption)) {
       return radiance;
+    }
+    dir = r.direction;
+    weight = throughput;
 #ifdef RR
     // For Russian-Roulette (minimizing live state)
     float rrPcont = (0 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
@@ -719,10 +723,10 @@ vec3 DirectSample(Ray r, out float firstHitT, out uint Li, out uint L_dir) {
 //-----------------------------------------------------------------------
 Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
   // Subpixel jitter: send the ray through a different position inside the pixel each time, to provide antialiasing.
-  vec2 subpixel_jitter = rtxState.frame == 0 ? vec2(0.5f, 0.5f) : vec2(rand(prd.seed), rand(prd.seed));
+  // vec2 subpixel_jitter = rtxState.frame == 0 ? vec2(0.5f, 0.5f) : vec2(rand(prd.seed), rand(prd.seed));
 
   // Compute sampling position between [-1 .. 1]
-  const vec2 pixelCenter = vec2(imageCoords) + subpixel_jitter;
+  const vec2 pixelCenter = vec2(imageCoords)/* + subpixel_jitter*/;
   const vec2 inUV = pixelCenter / vec2(sizeImage.xy);
   vec2 d = inUV * 2.0 - 1.0;
 

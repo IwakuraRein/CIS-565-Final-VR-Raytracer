@@ -164,9 +164,8 @@ void SampleExample::updateUniformBuffer(const VkCommandBuffer& cmdBuf)
 		return;
 
 	LABEL_SCOPE_VK(cmdBuf);
-	const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
 
-	m_scene.updateCamera(cmdBuf, aspectRatio);
+	m_scene.updateCamera(cmdBuf, m_renderRegion.extent);
 	vkCmdUpdateBuffer(cmdBuf, m_sunAndSkyBuffer.buffer, 0, sizeof(SunAndSky), &m_sunAndSky);
 }
 
@@ -359,7 +358,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
+	m_offscreen.run(cmdBuf, m_rtxState, 1.f, size / area);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -391,8 +390,6 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 
 	// Handling de-scaling by reducing the size to render
 	VkExtent2D render_size = m_renderRegion.extent;
-	if (m_descaling)
-		render_size = VkExtent2D{ render_size.width / m_descalingLevel, render_size.height / m_descalingLevel };
 
 	m_rtxState.size = { render_size.width, render_size.height };
 	m_rtxState.time = (uint)(std::chrono::duration<double>(std::chrono::steady_clock::now() - m_start_time).count() * 1000.0);
@@ -511,11 +508,6 @@ void SampleExample::onMouseMotion(int x, int y)
 
 	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard)
 		return;
-
-	if (m_inputs.lmb || m_inputs.rmb || m_inputs.mmb)
-	{
-		m_descaling = true;
-	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -523,10 +515,6 @@ void SampleExample::onMouseMotion(int x, int y)
 //
 void SampleExample::onMouseButton(int button, int action, int mods)
 {
+	if (m_busy) return;
 	AppBaseVk::onMouseButton(button, action, mods);
-	if ((m_inputs.lmb || m_inputs.rmb || m_inputs.mmb) == false && action == GLFW_RELEASE && m_descaling == true)
-	{
-		m_descaling = false;
-		resetFrame();
-	}
 }

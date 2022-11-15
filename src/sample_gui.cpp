@@ -124,11 +124,6 @@ bool SampleGUI::guiRayTracing()
 
 	changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 2, 16);
 	changed |= GuiH::Slider("Max Iteration ", "", &_se->m_maxFrames, nullptr, Normal, 1, 1000);
-	changed |= GuiH::Slider("De-scaling ",
-		"Reduce resolution while navigating.\n"
-		"Speeding up rendering while camera moves.\n"
-		"Value of 1, will not de-scale",
-		&_se->m_descalingLevel, nullptr, Normal, 1, 8);
 
 	changed |= GuiH::Selection("Pbr Mode", "PBR material model", &rtxState.pbrMode, nullptr, Normal, { "Disney", "Gltf" });
 
@@ -159,9 +154,9 @@ bool SampleGUI::guiRayTracing()
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
-	changed |= GuiH::Slider("Sampling Rate",
-		"The samples per pixel",
-		&rtxState.spp, nullptr, Normal, 0, 32);
+	//changed |= GuiH::Slider("Sampling Rate",
+	//	"The samples per pixel",
+	//	&rtxState.spp, nullptr, Normal, 0, 32);
 	GuiH::Group<bool>("Direct Light", false, [&] {
 		changed |= GuiH::Slider("Environment Weight",
 			"If there is a environment map, the probability it will be used in direct light sampling",
@@ -169,8 +164,11 @@ bool SampleGUI::guiRayTracing()
 		return changed;
 		});
 	GuiH::Group<bool>("Indirect Light", false, [&] {
-		ImGui::Text("Place Holder");
-		return true;
+		changed |= GuiH::Slider("De-scaling ",
+			"Reduce resolution while path tracing.\n"
+			"Value of 1, will not de-scale.",
+			&_se->m_rtxState.descale, nullptr, Normal, 1, 8);
+		return changed;
 		});
 	return changed;
 }
