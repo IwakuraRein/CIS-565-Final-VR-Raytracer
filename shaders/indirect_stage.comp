@@ -92,30 +92,45 @@ void main() {
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;
   // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
+  
+  // the seed should be the same as direct stage cause they are using the same push constant value
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
-  vec3 directPixelColor = vec3(0);
-  vec3 indirectPixelColor = vec3(0);
+  vec3 pixelColor = vec3(0);
   float depth;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+
+    uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
+    depth = imageLoad(thisDirectResultImage, imageCoords).w;
     State state;
-    
-    vec3 directRadiance = DirectSample(ray, state, depth);
+    // state.position = getWorldPos(depth);
+    state.position = ray.origin + ray.direction * depth;
+    state.normal = decompress_unit_vec(gInfo.x);
+    state.tangent = decompress_unit_vec(gInfo.y);
+    state.bitangent = cross(state.normal, state.tangent);
+    state.texCoord = unpackUnorm2x16(gInfo.z);
+    state.matID = gInfo.w;
+    state.isEmitter = false;
+    state.specularBounce = false;
+    state.isSubsurface = false;
+    state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
 
-    vec3 indirectRadiance = IndirectSample(ray, state, depth);
+    // Filling material structures
+    GetMaterialsAndTextures(state, ray);
 
-    float lum = dot(directRadiance + indirectRadiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    // Color at vertices
+
+    vec3 radiance = IndirectSample(ray, state, depth);
+
+    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold) {
-      indirectRadiance *= rtxState.fireflyClampThreshold / lum;
-      directRadiance *= rtxState.fireflyClampThreshold / lum;
+      radiance *= rtxState.fireflyClampThreshold / lum;
     }
-    indirectPixelColor += indirectRadiance;
-    directPixelColor += directRadiance;
+    pixelColor += radiance;
   }
-  directPixelColor /= rtxState.spp;
-  indirectPixelColor /= rtxState.spp;
+  pixelColor /= rtxState.spp;
 
   // Debug - Heatmap
   // if(rtxState.debugging_mode == eHeatmap) {
@@ -131,17 +146,12 @@ void main() {
 
   // Saving pixel color
   if(rtxState.frame > 0) {
-    // Do accumulation over time
-    vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
-    vec3 new_result = mix(old_color, directPixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, depth));
-    
-    old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
-    new_result = mix(old_color, indirectPixelColor, 1.0f / float(rtxState.frame + 1));
+    // Do accumulation over time    
+    vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
+    vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
     imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, depth));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisDirectResultImage, imageCoords, vec4(directPixelColor, depth));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(indirectPixelColor, depth));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, depth));
   }
 }

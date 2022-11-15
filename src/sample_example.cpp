@@ -396,8 +396,7 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 
 	m_rtxState.size = { render_size.width, render_size.height };
 	m_rtxState.time = (uint)(std::chrono::duration<double>(std::chrono::steady_clock::now() - m_start_time).count() * 1000.0);
-	// State is the push constant structure
-	m_pRender->setPushContants(m_rtxState);
+
 	// Running the renderer
 	m_pRender->run(cmdBuf, m_rtxState, profiler,
 		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState), m_scene.getDescSet(), m_descSet });

@@ -36,11 +36,11 @@
 // clang-format off
 layout(set = S_ACCEL, binding = eTlas)					uniform accelerationStructureEXT topLevelAS;
 //
-layout(set = S_OUT,   binding = eLastDirectResult)					uniform image2D			lastDirectResultImage;
-layout(set = S_OUT,   binding = eLastIndirectResult)					uniform image2D			lastIndirectResultImage;
+layout(set = S_OUT,   binding = eLastDirectResult)   uniform readonly image2D lastDirectResultImage;
+layout(set = S_OUT,   binding = eLastIndirectResult) uniform readonly image2D lastIndirectResultImage;
 
-layout(set = S_OUT,   binding = eThisDirectResult)					uniform image2D			thisDirectResultImage;
-layout(set = S_OUT,   binding = eThisIndirectResult)					uniform image2D			thisIndirectResultImage;
+layout(set = S_OUT,   binding = eThisDirectResult)   uniform image2D thisDirectResultImage;
+layout(set = S_OUT,   binding = eThisIndirectResult) uniform image2D thisIndirectResultImage;
 //
 layout(set = S_SCENE, binding = eInstData,	scalar)   buffer _InstanceInfo	{ InstanceData geoInfo[]; };
 layout(set = S_SCENE, binding = eCamera,	  scalar)   uniform _SceneCamera	{ SceneCamera sceneCamera; };
@@ -54,10 +54,12 @@ layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky 
 layout(set = S_ENV, binding = eHdr)						uniform sampler2D		environmentTexture;
 layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ ImptSampData envSamplingData[]; };
 
-// layout(set = S_RAYQ, binding = eLastGbuffer,  scalar)		buffer _LastGbuffer	{ GeomData lastGbuffer[]; };
-// layout(set = S_RAYQ, binding = eThisGbuffer,  scalar)		buffer _ThisGbuffer	{ GeomData thisGbuffer[]; };
-layout(set = S_RAYQ, binding = eLastGbuffer)		uniform uimage2D lastGbuffer; 
-layout(set = S_RAYQ, binding = eThisGbuffer)		uniform uimage2D thisGbuffer; 
+layout(set = S_RAYQ, binding = eLastDirectCache)   uniform readonly uimage2D lastDirectCache; 
+layout(set = S_RAYQ, binding = eThisDirectCache)   uniform uimage2D thisDirectCache; 
+layout(set = S_RAYQ, binding = eLastIndirectCache) uniform readonly uimage2D lastIndirectCache; 
+layout(set = S_RAYQ, binding = eThisIndirectCache) uniform uimage2D thisIndirectCache; 
+layout(set = S_RAYQ, binding = eLastGbuffer)       uniform readonly uimage2D lastGbuffer; 
+layout(set = S_RAYQ, binding = eThisGbuffer)       uniform uimage2D thisGbuffer; 
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

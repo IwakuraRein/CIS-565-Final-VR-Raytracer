@@ -96,7 +96,11 @@ END_ENUM();
 // Ray Query - Set 4
 START_ENUM(RayQBindings)
 eLastGbuffer = 0,
-eThisGbuffer = 1
+eThisGbuffer = 1,
+eLastDirectCache = 2,
+eLastIndirectCache = 3,
+eThisDirectCache = 4,
+eThisIndirectCache = 5
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -117,10 +121,13 @@ END_ENUM();
 // clang-format on
 
 // Camera of the scene
+#define CAMERA_NEAR 0.001f
+#define CAMERA_FAR 100000.0f
 struct SceneCamera
 {
 	mat4  viewInverse;
 	mat4  projInverse;
+	mat4  projView;
 	float focalDist;
 	float aperture;
 	// Extra
@@ -195,17 +202,6 @@ struct GltfShadeMaterial
 	uint sheen;
 	int  pad;
 	// 52
-};
-
-// Gbuffer
-struct GeomData {
-	vec3 normal;
-	vec3 tangent;
-	vec2 texCoord;
-	//8
-	uint matIndex;
-	vec3 position;
-	//12
 };
 
 // Use with PushConstant
