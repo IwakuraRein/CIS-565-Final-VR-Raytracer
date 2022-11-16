@@ -244,19 +244,17 @@ const int LightType_Spot = 2;
 const int LightType_Triangle = 3;
 
 // ReSTIR
-struct LightSample{
+struct LightSample {
 	vec3 Li;
 	vec3 wi;
 	float dist;
 };
 
-struct Reservoir{
-	LightSample sample;
+struct Reservoir {
+	LightSample lightSample;
 	uint num;
 	float weight;
-}
-
-
+};
 
 // acceleration structure for importance sampling - pre-computed
 struct ImptSampData
