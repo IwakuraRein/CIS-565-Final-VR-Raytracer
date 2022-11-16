@@ -243,6 +243,21 @@ const int LightType_Spot = 2;
 // custom light source for direct light importance sampling
 const int LightType_Triangle = 3;
 
+// ReSTIR
+struct LightSample{
+	vec3 Li;
+	vec3 wi;
+	float dist;
+};
+
+struct Reservoir{
+	LightSample sample;
+	uint num;
+	float weight;
+}
+
+
+
 // acceleration structure for importance sampling - pre-computed
 struct ImptSampData
 {

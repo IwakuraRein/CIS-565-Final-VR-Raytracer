@@ -600,6 +600,8 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
   return radiance;
 }
 
+
+
 vec3 DirectSample(Ray r, out float firstHitT, out uint Li, out uint L_dir) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
