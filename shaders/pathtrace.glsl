@@ -354,8 +354,10 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
   radiance += state.mat.emission * throughput;
   // add screenspace indirect
   vec3 ndc = vec3(sceneCamera.projView * vec4(state.position, 1.0));
+  ndc += vec3(1, 1, 0);
+  ndc *= 0.5;
   //check if this sample appears in direct stage's result
-  if(ndc.x >= -1.0 && ndc.x <= 1.0 && ndc.y >= -1.0 && ndc.y <= 1.0) {
+  if(ndc.x >= 0.0 && ndc.x <= 1.0 && ndc.y >= 0.0 && ndc.y <= 1.0) {
     // TODO: adjust offset according to normal
     if(getDepth(ndc.z) <= (screenDepth + 1e-3)) {
       ivec2 coord = ivec2(round(ndc.x * rtxState.size.x), round(ndc.y * rtxState.size.y));

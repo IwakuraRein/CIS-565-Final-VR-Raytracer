@@ -87,6 +87,9 @@ private:
   std::array<nvvk::Texture, 2>         m_directResult;
   std::array<nvvk::Texture, 2>         m_indirectResult;
   //VkFormat m_offscreenColorFormat{VkFormat::eR16G16B16A16Sfloat};  // Darkening the scene over 5000 iterations
+
+  // Direct: RGB color and light source distance
+  // Indirect: RGB color and screen depth
   VkFormat m_offscreenColorFormat{VK_FORMAT_R32G32B32A32_SFLOAT};
   VkFormat m_offscreenDepthFormat{VK_FORMAT_X8_D24_UNORM_PACK32};  // Will be replaced by best supported format
 

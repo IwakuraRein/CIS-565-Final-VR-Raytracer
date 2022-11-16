@@ -99,6 +99,9 @@ bool getStateFromCache(Ray ray, out State state) {
   state.isSubsurface = false;
   state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
 
+  // Filling material structures
+  GetMaterialsAndTextures(state, ray);
+
   return true;
 }
 
@@ -126,11 +129,8 @@ void main() {
     State state;
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
 
-    if(!getStateFromCache(ray, state)) break;
-
-    // Filling material structures
-    GetMaterialsAndTextures(state, ray)
-      ;
+    if(!getStateFromCache(ray, state))
+      break;
 
     // Color at vertices
 
@@ -161,9 +161,9 @@ void main() {
     // Do accumulation over time    
     vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, depth));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 0));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, depth));
+    imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 0));
   }
 }

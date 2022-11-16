@@ -71,14 +71,17 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
+  std::array<nvvk::Texture, 2> m_depth;
   std::array<nvvk::Texture, 2> m_directCache;
   std::array<nvvk::Texture, 2> m_indirectCache;
   // Normal, Tangent, TexCoord, Material ID
+  // TODO: compress tangent to 16bit
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
+  VkFormat m_depthFormat{ VK_FORMAT_R32_SFLOAT };
 
   // The luminance can be compressed to 32bit YCbCr
   // The unit vector can also be compressed to 32bit
-  // Direct stage: Li, Direction, ReSTIR Weight, undecided
+  // Direct stage: Li, Direction, Num, Weight
   // Indirect stage: Li, Direction, Radiance Cache Index, undecided
   VkFormat m_radianceCacheFormat{ VK_FORMAT_R32G32B32A32_UINT };
   nvvk::DescriptorSetBindings m_bind;

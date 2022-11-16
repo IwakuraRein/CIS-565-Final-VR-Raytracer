@@ -17,20 +17,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
- /*
-   Various structure used by CPP and GLSL
- */
-
+/*
+  Various structure used by CPP and GLSL
+*/
 
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-
 #ifdef __cplusplus
 #include <stdint.h>
 #include "nvmath/nvmath.h"
- // GLSL Type
+// GLSL Type
 using ivec2 = nvmath::vec2i;
 using vec2 = nvmath::vec2f;
 using vec3 = nvmath::vec3f;
@@ -100,7 +97,9 @@ eThisGbuffer = 1,
 eLastDirectCache = 2,
 eLastIndirectCache = 3,
 eThisDirectCache = 4,
-eThisIndirectCache = 5
+eThisIndirectCache = 5,
+eLastDepth = 6,
+eThisDepth = 7
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -125,9 +124,9 @@ END_ENUM();
 #define CAMERA_FAR 100000.0f
 struct SceneCamera
 {
-	mat4  viewInverse;
-	mat4  projInverse;
-	mat4  projView;
+	mat4 viewInverse;
+	mat4 projInverse;
+	mat4 projView;
 	float focalDist;
 	float aperture;
 	// Extra
@@ -137,12 +136,11 @@ struct SceneCamera
 struct VertexAttributes
 {
 	vec3 position;
-	uint normal;    // compressed using oct
-	vec2 texcoord;  // Tangent handiness, stored in LSB of .y
-	uint tangent;   // compressed using oct
-	uint color;     // RGBA
+	uint normal;   // compressed using oct
+	vec2 texcoord; // Tangent handiness, stored in LSB of .y
+	uint tangent;  // compressed using oct
+	uint color;	   // RGBA
 };
-
 
 // GLTF material
 #define MATERIAL_METALLICROUGHNESS 0
@@ -155,26 +153,26 @@ struct GltfShadeMaterial
 	// 0
 	vec4 pbrBaseColorFactor;
 	// 4
-	int   pbrBaseColorTexture;
+	int pbrBaseColorTexture;
 	float pbrMetallicFactor;
 	float pbrRoughnessFactor;
-	int   pbrMetallicRoughnessTexture;
+	int pbrMetallicRoughnessTexture;
 	// 8
-	vec4 khrDiffuseFactor;  // KHR_materials_pbrSpecularGlossiness
+	vec4 khrDiffuseFactor; // KHR_materials_pbrSpecularGlossiness
 	vec3 khrSpecularFactor;
-	int  khrDiffuseTexture;
+	int khrDiffuseTexture;
 	// 16
-	int   shadingModel;  // 0: metallic-roughness, 1: specular-glossiness
+	int shadingModel; // 0: metallic-roughness, 1: specular-glossiness
 	float khrGlossinessFactor;
-	int   khrSpecularGlossinessTexture;
-	int   emissiveTexture;
+	int khrSpecularGlossinessTexture;
+	int emissiveTexture;
 	// 20
 	vec3 emissiveFactor;
-	int  alphaMode;
+	int alphaMode;
 	// 24
 	float alphaCutoff;
-	int   doubleSided;
-	int   normalTexture;
+	int doubleSided;
+	int normalTexture;
 	float normalTextureScale;
 	// 28
 	mat4 uvTransform;
@@ -182,45 +180,45 @@ struct GltfShadeMaterial
 	int unlit;
 
 	float transmissionFactor;
-	int   transmissionTexture;
+	int transmissionTexture;
 
 	float ior;
 	// 36
-	vec3  anisotropyDirection;
+	vec3 anisotropyDirection;
 	float anisotropy;
 	// 40
-	vec3  attenuationColor;
-	float thicknessFactor;  // 44
-	int   thicknessTexture;
+	vec3 attenuationColor;
+	float thicknessFactor; // 44
+	int thicknessTexture;
 	float attenuationDistance;
 	// --
 	float clearcoatFactor;
 	float clearcoatRoughness;
 	// 48
-	int  clearcoatTexture;
-	int  clearcoatRoughnessTexture;
+	int clearcoatTexture;
+	int clearcoatRoughnessTexture;
 	uint sheen;
-	int  pad;
+	int pad;
 	// 52
 };
 
 // Use with PushConstant
 struct RtxState
 {
-	int   frame;                  // Current frame, start at 0
-	int   maxDepth;               // How deep the path is
-	int   spp;
-	float fireflyClampThreshold;  // to cut fireflies
+	int frame;	  // Current frame, start at 0
+	int maxDepth; // How deep the path is
+	int spp;
+	float fireflyClampThreshold; // to cut fireflies
 
-	float hdrMultiplier;          // To brightening the scene
-	int   debugging_mode;         // See DebugMode
-	int   pbrMode;                // 0-Disney, 1-Gltf
-	float environmentProb;        // Used in direct light importance sampling
+	float hdrMultiplier;   // To brightening the scene
+	int debugging_mode;	   // See DebugMode
+	int pbrMode;		   // 0-Disney, 1-Gltf
+	float environmentProb; // Used in direct light importance sampling
 
-	ivec2 size;                   // rendering size
-	int   minHeatmap;             // Debug mode - heat map
-	int   maxHeatmap;
-	uint time;                   // How long has the app been running. miliseconds.
+	ivec2 size;		// rendering size
+	int minHeatmap; // Debug mode - heat map
+	int maxHeatmap;
+	uint time; // How long has the app been running. miliseconds.
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -229,9 +227,8 @@ struct InstanceData
 {
 	uint64_t vertexAddress;
 	uint64_t indexAddress;
-	int      materialIndex;
+	int materialIndex;
 };
-
 
 // KHR_lights_punctual extension.
 // see https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_lights_punctual
@@ -244,24 +241,24 @@ const int LightType_Spot = 2;
 const int LightType_Triangle = 3;
 
 // ReSTIR
-struct LightSample{
+struct LightSample
+{
 	vec3 Li;
 	vec3 wi;
 	float dist;
 };
 
-struct Reservoir{
-	LightSample sample;
+struct Reservoir
+{
+	LightSample lightSample;
 	uint num;
 	float weight;
-}
-
-
+};
 
 // acceleration structure for importance sampling - pre-computed
 struct ImptSampData
 {
-	int  alias;
+	int alias;
 	float q;
 	float pdf;
 	float aliasPdf;
@@ -269,13 +266,13 @@ struct ImptSampData
 
 struct PuncLight // point, spot, or directional light.
 {
-	int   type;
-	vec3  direction;
+	int type;
+	vec3 direction;
 
 	float intensity;
-	vec3  color;
+	vec3 color;
 
-	vec3  position;
+	vec3 position;
 	float range;
 
 	float outerConeCos;
@@ -285,7 +282,8 @@ struct PuncLight // point, spot, or directional light.
 	ImptSampData impSamp;
 };
 
-struct TrigLight { // triangles of emissive meshes
+struct TrigLight
+{ // triangles of emissive meshes
 	uint matIndex;
 	uint transformIndex;
 	vec3 v0;
@@ -298,7 +296,8 @@ struct TrigLight { // triangles of emissive meshes
 	vec3 pad;
 };
 
-struct LightBufInfo {
+struct LightBufInfo
+{
 	uint puncLightSize;
 	uint trigLightSize;
 	float trigSampProb;
@@ -315,18 +314,17 @@ struct Tonemapper
 
 	float avgLum;
 	float zoom;
-	vec2  renderingRatio;
+	vec2 renderingRatio;
 
-	int   autoExposure;
-	float Ywhite;  // Burning white
-	float key;     // Log-average luminance
+	int autoExposure;
+	float Ywhite; // Burning white
+	float key;	  // Log-average luminance
 	int pad;
 };
 
-
 struct SunAndSky
 {
-	vec3  rgb_unit_conversion;
+	vec3 rgb_unit_conversion;
 	float multiplier;
 
 	float haze;
@@ -334,20 +332,19 @@ struct SunAndSky
 	float saturation;
 	float horizon_height;
 
-	vec3  ground_color;
+	vec3 ground_color;
 	float horizon_blur;
 
-	vec3  night_color;
+	vec3 night_color;
 	float sun_disk_intensity;
 
-	vec3  sun_direction;
+	vec3 sun_direction;
 	float sun_disk_scale;
 
 	float sun_glow_intensity;
-	int   y_is_up;
-	int   physically_scaled_sun;
-	int   in_use;
+	int y_is_up;
+	int physically_scaled_sun;
+	int in_use;
 };
 
-
-#endif  // COMMON_HOST_DEVICE
+#endif // COMMON_HOST_DEVICE

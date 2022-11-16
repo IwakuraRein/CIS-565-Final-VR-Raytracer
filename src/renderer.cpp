@@ -59,6 +59,8 @@ void Renderer::destroy()
 	m_pAlloc->destroy(m_directCache[1]);
 	m_pAlloc->destroy(m_indirectCache[0]);
 	m_pAlloc->destroy(m_indirectCache[1]);
+	m_pAlloc->destroy(m_depth[0]);
+	m_pAlloc->destroy(m_depth[1]);
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
@@ -147,6 +149,8 @@ void Renderer::update(const VkExtent2D& size) {
 		m_size = size;
 		m_pAlloc->destroy(m_gbuffer[0]);
 		m_pAlloc->destroy(m_gbuffer[1]);
+		m_pAlloc->destroy(m_depth[0]);
+		m_pAlloc->destroy(m_depth[1]);
 		m_pAlloc->destroy(m_directCache[0]);
 		m_pAlloc->destroy(m_directCache[1]);
 		m_pAlloc->destroy(m_indirectCache[0]);
@@ -157,20 +161,22 @@ void Renderer::update(const VkExtent2D& size) {
 			| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 
-		std::array<VkWriteDescriptorSet, 6> writes;
+		std::array<VkWriteDescriptorSet, 8> writes;
 		writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_gbuffer[0].descriptor);
 		writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_gbuffer[1].descriptor);
 		writes[2] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDirectCache, &m_directCache[0].descriptor);
 		writes[3] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDirectCache, &m_directCache[1].descriptor);
 		writes[4] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastIndirectCache, &m_indirectCache[0].descriptor);
 		writes[5] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisIndirectCache, &m_indirectCache[1].descriptor);
+		writes[6] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDepth, &m_depth[0].descriptor);
+		writes[7] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDepth, &m_depth[1].descriptor);
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 		writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_gbuffer[1].descriptor);
 		writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_gbuffer[0].descriptor);
 		writes[2] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
 		writes[3] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
-		writes[4] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
-		writes[5] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
+		writes[6] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDepth, &m_depth[1].descriptor);
+		writes[7] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDepth, &m_depth[0].descriptor);
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	//}
 }
@@ -211,10 +217,25 @@ void Renderer::createImage()
 		m_directCache[1] = m_pAlloc->createTexture(cacheimage2, ivInfo2);
 		m_indirectCache[0] = m_pAlloc->createTexture(cacheimage3, ivInfo3);
 		m_indirectCache[1] = m_pAlloc->createTexture(cacheimage4, ivInfo4);
+
 		m_directCache[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		m_directCache[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		m_indirectCache[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		m_indirectCache[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+		colorCreateInfo = nvvk::makeImage2DCreateInfo(
+			m_size, m_depthFormat,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
+		nvvk::Image dimage1 = m_pAlloc->createImage(colorCreateInfo);
+		NAME_VK(dimage1.image);
+		nvvk::Image dimage2 = m_pAlloc->createImage(colorCreateInfo);
+		NAME_VK(dimage2.image);
+		VkImageViewCreateInfo ivInfo5 = nvvk::makeImageViewCreateInfo(dimage1.image, colorCreateInfo);
+		VkImageViewCreateInfo ivInfo6 = nvvk::makeImageViewCreateInfo(dimage2.image, colorCreateInfo);
+		m_depth[0] = m_pAlloc->createTexture(dimage1, ivInfo5);
+		m_depth[1] = m_pAlloc->createTexture(dimage2, ivInfo6);
+		m_depth[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		m_depth[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	}
 
 	// Setting the image layout for both color and depth
@@ -227,6 +248,8 @@ void Renderer::createImage()
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_directCache[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_indirectCache[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_indirectCache[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		nvvk::cmdBarrierImageLayout(cmdBuf, m_depth[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		nvvk::cmdBarrierImageLayout(cmdBuf, m_depth[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		genCmdBuf.submitAndWait(cmdBuf);
 	}
@@ -248,25 +271,28 @@ void Renderer::createDescriptorSet()
 	m_bind.addBinding({ RayQBindings::eThisDirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 	m_bind.addBinding({ RayQBindings::eLastIndirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 	m_bind.addBinding({ RayQBindings::eThisIndirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eThisDepth, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eLastDepth, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 
 	m_descPool = m_bind.createPool(m_device, m_descSet.size());
 	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
 	CREATE_NAMED_VK(m_descSet[0], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 	CREATE_NAMED_VK(m_descSet[1], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
-
-	std::array<VkWriteDescriptorSet, 6> writes;
+	std::array<VkWriteDescriptorSet, 8> writes;
 	writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_gbuffer[0].descriptor);
 	writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_gbuffer[1].descriptor);
 	writes[2] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDirectCache, &m_directCache[0].descriptor);
 	writes[3] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDirectCache, &m_directCache[1].descriptor);
 	writes[4] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastIndirectCache, &m_indirectCache[0].descriptor);
 	writes[5] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisIndirectCache, &m_indirectCache[1].descriptor);
+	writes[6] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDepth, &m_depth[0].descriptor);
+	writes[7] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDepth, &m_depth[1].descriptor);
 	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_gbuffer[1].descriptor);
 	writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_gbuffer[0].descriptor);
 	writes[2] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
 	writes[3] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
-	writes[4] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
-	writes[5] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
+	writes[6] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDepth, &m_depth[1].descriptor);
+	writes[7] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDepth, &m_depth[0].descriptor);
 	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }

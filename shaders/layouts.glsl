@@ -54,8 +54,11 @@ layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky 
 layout(set = S_ENV, binding = eHdr)						uniform sampler2D		environmentTexture;
 layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ ImptSampData envSamplingData[]; };
 
-layout(set = S_RAYQ, binding = eLastDirectCache)   uniform readonly uimage2D lastDirectCache; 
-layout(set = S_RAYQ, binding = eThisDirectCache)   uniform uimage2D thisDirectCache; 
+layout(set = S_RAYQ, binding = eLastDepth)   uniform readonly uimage2D lastDepth;
+layout(set = S_RAYQ, binding = eThisDepth)   uniform uimage2D thisDepth;
+
+layout(set = S_RAYQ, binding = eLastDirectCache)   uniform uimage2D lastDirectCache;
+layout(set = S_RAYQ, binding = eThisDirectCache)   uniform uimage2D thisDirectCache;
 layout(set = S_RAYQ, binding = eLastIndirectCache) uniform readonly uimage2D lastIndirectCache; 
 layout(set = S_RAYQ, binding = eThisIndirectCache) uniform uimage2D thisIndirectCache; 
 layout(set = S_RAYQ, binding = eLastGbuffer)       uniform readonly uimage2D lastGbuffer; 
