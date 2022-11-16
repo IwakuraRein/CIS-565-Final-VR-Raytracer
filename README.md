@@ -14,3 +14,7 @@ This is the final project for [CIS 565 2022](https://cis565-fall-2022.github.io/
 - [ ] Global Illumination with ReSTIR
 - [ ] Radiance Cache
 - [ ] Displacement Map
+
+## Presentations
+
+* [Final Project Pitch](https://docs.google.com/presentation/d/1NLRpVT09ZlEVntIzB865NTc5noMcgNP8SMXB7Bp0KEk)
