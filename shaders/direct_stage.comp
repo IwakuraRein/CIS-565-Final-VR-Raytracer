@@ -97,12 +97,12 @@ void main() {
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
-  float depth;
+  uvec4 gInfo;
   Reservoir resv;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
-    vec3 radiance = DirectSample(ray, depth, resv);
+    vec3 radiance = DirectSample(ray, gInfo, resv);
 
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold) {
@@ -127,7 +127,7 @@ void main() {
   // Saving pixel color
 
   imageStore(thisDirectCache, imageCoords, encodeResvoir(resv));
-  imageStore(thisDepth, imageCoords, vec4(depth));
+  imageStore(thisGbuffer, imageCoords, gInfo);
   if(rtxState.frame > 0) {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;

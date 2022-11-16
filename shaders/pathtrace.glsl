@@ -604,7 +604,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
 
 
-vec3 DirectSample(Ray r, out float firstHitT, inout Reservoir resv) {
+vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
   //   vec3 v0 = light.v0;
@@ -630,7 +630,7 @@ vec3 DirectSample(Ray r, out float firstHitT, inout Reservoir resv) {
   
   resv.lightSample.Li = vec3(0);
   ClosestHit(r);
-  firstHitT = prd.hitT;
+  gInfo.w = floatBitsToUint(prd.hitT);
   if(prd.hitT >= INFINITY) {
     // state.position = vec3(INFINITY) + abs(r.origin);
 
@@ -642,6 +642,7 @@ vec3 DirectSample(Ray r, out float firstHitT, inout Reservoir resv) {
       env = texture(environmentTexture, uv).rgb;
     }
     // Done sampling return
+    
     return (env * rtxState.hdrMultiplier);
   }
   State state;
@@ -663,7 +664,11 @@ vec3 DirectSample(Ray r, out float firstHitT, inout Reservoir resv) {
   // Color at vertices
   // state.mat.albedo *= sstate.color;
   // Normal, Tangent, TexCoord, Material ID
-  imageStore(thisGbuffer, imageCoords, uvec4(compress_unit_vec(state.normal), compress_unit_vec(state.tangent), packUnorm2x16(state.texCoord), state.matID));
+  gInfo.y = compress_unit_vec(state.normal);
+  gInfo.z = packUnorm2x16(state.texCoord);
+  gInfo.x = packTangent(state.normal, state.tangent);
+  gInfo.x = state.matID << 16 + ((gInfo.x << 16) >> 16);
+  gInfo.x = state.matID << 16;
 
   if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);

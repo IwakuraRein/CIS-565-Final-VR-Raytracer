@@ -83,17 +83,19 @@ ivec2 SampleSizzled() {
 //
 //
 
+// TODO: fix tangent
 bool getStateFromCache(Ray ray, out State state, out float depth) {
-  depth = imageLoad(thisDepth, imageCoords).x;
-  state.position = ray.origin + ray.direction * depth;
+  uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
+  depth = uintBitsToFloat(gInfo.w);
   if(depth >= INFINITY)
     return false;
-  uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
-  state.normal = decompress_unit_vec(gInfo.x);
-  state.tangent = decompress_unit_vec(gInfo.y);
+  state.position = ray.origin + ray.direction * depth;
+  state.normal = decompress_unit_vec(gInfo.y);
+  state.tangent = unpackTangent(state.normal, gInfo.x);
   state.bitangent = cross(state.normal, state.tangent);
+  //CreateCoordinateSystem(state.normal, state.tangent, state.bitangent);
   state.texCoord = unpackUnorm2x16(gInfo.z);
-  state.matID = gInfo.w;
+  state.matID = gInfo.x >> 16;
   state.isEmitter = false;
   state.specularBounce = false;
   state.isSubsurface = false;
@@ -129,8 +131,6 @@ void main() {
 
     if(!getStateFromCache(ray, state, depth))
       break;
-
-    // Color at vertices
 
     vec3 radiance = IndirectSample(ray, state, depth);
 

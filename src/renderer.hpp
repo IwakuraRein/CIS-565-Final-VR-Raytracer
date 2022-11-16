@@ -71,13 +71,10 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
-  std::array<nvvk::Texture, 2> m_depth; // will be removed once better compression to gbuffer is found
   std::array<nvvk::Texture, 2> m_directCache;
   std::array<nvvk::Texture, 2> m_indirectCache;
-  // Normal, Tangent, TexCoord, Material ID
-  // TODO: compress tangent to 16bit
+  // Material ID 16bit, Tangent 16bit, Normal, TexCoord, Depth
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
-  VkFormat m_depthFormat{ VK_FORMAT_R32_SFLOAT };
 
   // The luminance can be compressed to 32bit YCbCr
   // The unit vector can also be compressed to 32bit

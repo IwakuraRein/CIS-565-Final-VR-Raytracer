@@ -144,4 +144,24 @@ float getZ(float depth) { // untested
   return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);
 }
 
+// doesn't work properly. will be fixed in future
+uint packTangent(vec3 n, vec3 t){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  float theta = acos(dot(t, T)) / M_PI;
+  float phi = acos(dot(t, B));
+  if (phi > M_PI_2) theta = -theta;
+  // uint val = packSnorm2x16(vec2(0, theta));
+  
+  return uint((theta + 1.0) * 32767.0);
+}
+vec3 unpackTangent(vec3 n, uint val){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  // float theta = unpackSnorm2x16(val).y * M_PI;
+  float theta = (float((val << 16) >> 16) / 32767.0 - 1.0) * M_PI;
+  float phi = M_PI_2 - theta;
+  return cos(theta) * T + sin(phi) * B;
+}
+
 #endif  // RAYCOMMON_GLSL

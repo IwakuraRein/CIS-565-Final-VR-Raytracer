@@ -97,9 +97,7 @@ eThisGbuffer = 1,
 eLastDirectCache = 2,
 eLastIndirectCache = 3,
 eThisDirectCache = 4,
-eThisIndirectCache = 5,
-eLastDepth = 6,
-eThisDepth = 7
+eThisIndirectCache = 5
 END_ENUM();
 
 START_ENUM(DebugMode)
