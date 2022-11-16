@@ -83,8 +83,8 @@ ivec2 SampleSizzled() {
 //
 //
 
-bool getStateFromCache(Ray ray, out State state) {
-  float depth = imageLoad(thisDirectResultImage, imageCoords).w;
+bool getStateFromCache(Ray ray, out State state, out float depth) {
+  depth = imageLoad(thisDepth, imageCoords).x;
   state.position = ray.origin + ray.direction * depth;
   if(depth >= INFINITY)
     return false;
@@ -124,12 +124,10 @@ void main() {
   float depth;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
 
-    uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
-    depth = imageLoad(thisDirectResultImage, imageCoords).w;
     State state;
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
 
-    if(!getStateFromCache(ray, state))
+    if(!getStateFromCache(ray, state, depth))
       break;
 
     // Color at vertices
