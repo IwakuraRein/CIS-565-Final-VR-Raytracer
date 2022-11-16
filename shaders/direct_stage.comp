@@ -126,7 +126,7 @@ void main() {
 
   // Saving pixel color
 
-  imageStore(thisDirectCache, imageCoords, uvec4(packUnormYCbCr(resv.lightSample.Li), compress_unit_vec(resv.lightSample.wi), resv.num, resv.weight));
+  imageStore(thisDirectCache, imageCoords, encodeResvoir(resv));
   imageStore(thisDepth, imageCoords, vec4(depth));
   if(rtxState.frame > 0) {
     // Do accumulation over time

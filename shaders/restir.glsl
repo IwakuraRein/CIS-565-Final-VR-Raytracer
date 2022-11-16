@@ -42,3 +42,17 @@ void resvPreClampedMerge(inout Reservoir resv, Reservoir rhs, float r, int clamp
     }
     resvMerge(resv, rhs, r);
 }
+
+uvec4 encodeResvoir(Reservoir resv) { // doesn't have distance to light
+    return uvec4(packUnormYCbCr(resv.lightSample.Li), compress_unit_vec(resv.lightSample.wi), resv.num, floatBitsToUint(resv.weight));
+}
+
+Reservoir decodeResvoir(uvec4 e, float dist) {
+    Reservoir resv;
+    resv.lightSample.Li = unpackUnormYCbCr(e.x);
+    resv.lightSample.wi = decompress_unit_vec(e.y);
+    resv.lightSample.dist = dist;
+    resv.num = e.z;
+    resv.weight = uintBitsToFloat(e.w);
+    return resv;
+}

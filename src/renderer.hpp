@@ -71,7 +71,7 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
-  std::array<nvvk::Texture, 2> m_depth;
+  std::array<nvvk::Texture, 2> m_depth; // will be removed once better compression to gbuffer is found
   std::array<nvvk::Texture, 2> m_directCache;
   std::array<nvvk::Texture, 2> m_indirectCache;
   // Normal, Tangent, TexCoord, Material ID
