@@ -98,12 +98,11 @@ void main() {
 
   vec3 pixelColor = vec3(0);
   float depth;
-  uint luminance;
-  uint dir;
+  Reservoir resv;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
-    vec3 radiance = DirectSample(ray, depth, luminance, dir);
+    vec3 radiance = DirectSample(ray, depth, resv);
 
     float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
     if(lum > rtxState.fireflyClampThreshold) {
@@ -127,15 +126,15 @@ void main() {
 
   // Saving pixel color
 
-  imageStore(thisDirectCache, imageCoords, uvec4(luminance, dir, 0, 0));
+  imageStore(thisDirectCache, imageCoords, uvec4(packUnormYCbCr(resv.lightSample.Li), compress_unit_vec(resv.lightSample.wi), resv.num, resv.weight));
   imageStore(thisDepth, imageCoords, vec4(depth));
   if(rtxState.frame > 0) {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 0));
+    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, resv.lightSample.dist));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 0));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, resv.lightSample.dist));
   }
 }

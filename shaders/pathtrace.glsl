@@ -256,9 +256,9 @@ vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
   return dirAndPdf;
 }
 
-vec3 DirectLuminance(in Ray r, in State state, out uint luminance, out uint dir) { // importance sample on light sources
+vec3 DirectLuminance(in Ray r, in State state, out vec3 luminance, out vec3 dir) { // importance sample on light sources
   vec4 dirAndPdf;
-  luminance = 0;
+  luminance = vec3(0);
   vec3 Li = vec3(0.0);
   float dist = INFINITY;
   float rnd = rand(prd.seed);
@@ -294,8 +294,8 @@ vec3 DirectLuminance(in Ray r, in State state, out uint luminance, out uint dir)
     return vec3(0.0);
   else {
     bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
-    dir = compress_unit_vec(dirAndPdf.xyz);
-    luminance = packUnormYCbCr(Li);
+    dir = dirAndPdf.xyz;
+    luminance = Li;
     return Li * bsdfSampleRec.f *
       max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w;
   }
@@ -604,7 +604,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
 
 
-vec3 DirectSample(Ray r, out float firstHitT, out uint Li, out uint L_dir) {
+vec3 DirectSample(Ray r, out float firstHitT, inout Reservoir resv) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
   //   vec3 v0 = light.v0;
@@ -627,8 +627,8 @@ vec3 DirectSample(Ray r, out float firstHitT, out uint Li, out uint L_dir) {
   //   if (length(r1)*sin1 <= 0.1) return vec3(0, 1, 0);
   //   if (length(r2)*sin2 <= 0.1) return vec3(0, 1, 0);
   // }
-  Li = 0;
-  L_dir = 0;
+  
+  resv.lightSample.Li = vec3(0);
   ClosestHit(r);
   firstHitT = prd.hitT;
   if(prd.hitT >= INFINITY) {
@@ -676,7 +676,7 @@ vec3 DirectSample(Ray r, out float firstHitT, out uint Li, out uint L_dir) {
   // else let random number decide
   float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-    return state.mat.emission + DirectLuminance(r, state, Li, L_dir) / lightsourceProb;
+    return state.mat.emission + DirectLuminance(r, state, resv.lightSample.Li, resv.lightSample.wi) / lightsourceProb;
   } else { // importance sampling on brdf
     Ray shadowRay;
     BsdfSampleRec bsdfSampleRec;
