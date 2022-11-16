@@ -228,7 +228,7 @@ void RenderOutput::createPostDescriptor()
 //--------------------------------------------------------------------------------------------------
 // Draw a full screen quad with the attached image
 //
-void RenderOutput::run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom, vec2 ratio)
+void RenderOutput::run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom, vec2 ratio, int frames)
 {
   LABEL_SCOPE_VK(cmdBuf);
 
@@ -239,7 +239,7 @@ void RenderOutput::run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom
   m_push.tm.renderingRatio = ratio;
   vkCmdPushConstants(cmdBuf, m_postPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstant), &m_push);
   vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipeline);
-  vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipelineLayout, 0, 1, &m_postDescSet[(state.frame + 1) % 2], 0, nullptr);
+  vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_postPipelineLayout, 0, 1, &m_postDescSet[(frames + 1) % 2], 0, nullptr);
   vkCmdDraw(cmdBuf, 3, 1, 0, 0);
 }
 

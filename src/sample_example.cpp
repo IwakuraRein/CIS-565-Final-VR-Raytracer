@@ -111,6 +111,7 @@ void SampleExample::loadEnvironmentHdr(const std::string& hdrFilename)
 //
 void SampleExample::loadAssets(const char* filename)
 {
+	m_totalFrames = -1;
 	std::string sfile = filename;
 
 	// Need to stop current rendering
@@ -164,9 +165,8 @@ void SampleExample::updateUniformBuffer(const VkCommandBuffer& cmdBuf)
 		return;
 
 	LABEL_SCOPE_VK(cmdBuf);
-	const float aspectRatio = m_renderRegion.extent.width / static_cast<float>(m_renderRegion.extent.height);
 
-	m_scene.updateCamera(cmdBuf, aspectRatio);
+	m_scene.updateCamera(cmdBuf, m_renderRegion.extent);
 	vkCmdUpdateBuffer(cmdBuf, m_sunAndSkyBuffer.buffer, 0, sizeof(SunAndSky), &m_sunAndSky);
 }
 
@@ -187,8 +187,10 @@ void SampleExample::updateFrame()
 		fov = f;
 	}
 
-	if (m_rtxState.frame < m_maxFrames)
+	if (m_rtxState.frame < m_maxFrames) {
 		m_rtxState.frame++;
+		m_totalFrames++;
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -359,7 +361,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area);
+	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area, m_totalFrames);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -399,7 +401,7 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 
 	// Running the renderer
 	m_pRender->run(cmdBuf, m_rtxState, profiler,
-		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState), m_scene.getDescSet(), m_descSet });
+		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_totalFrames), m_scene.getDescSet(), m_descSet }, m_totalFrames);
 
 
 	// For automatic brightness tonemapping

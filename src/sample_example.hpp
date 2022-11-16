@@ -187,13 +187,13 @@ public:
 		0,                    // in_use;
 	};
 
-	int         m_maxFrames{ 100000 };
+	int         m_maxFrames{ 1000 };
+	int         m_totalFrames{ -1 };
 	bool        m_showAxis{ true };
 	bool        m_descaling{ false };
 	int         m_descalingLevel{ 1 };
 	bool        m_busy{ false };
 	std::string m_busyReasonText;
-
 
 	std::shared_ptr<SampleGUI> m_gui;
 

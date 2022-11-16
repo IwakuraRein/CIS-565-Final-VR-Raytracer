@@ -68,7 +68,7 @@ public:
 	void createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
 	void createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
 	void destroy();
-	void updateCamera(const VkCommandBuffer& cmdBuf, float aspectRatio);
+	void updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size);
 
 
 	VkDescriptorSetLayout            getDescLayout() { return m_descSetLayout; }
