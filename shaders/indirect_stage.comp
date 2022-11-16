@@ -82,6 +82,26 @@ ivec2 SampleSizzled() {
 //--------------------------------------------------------------------------------------------------
 //
 //
+
+bool getStateFromCache(Ray ray, out State state) {
+  float depth = imageLoad(thisDirectResultImage, imageCoords).w;
+  state.position = ray.origin + ray.direction * depth;
+  if(depth >= INFINITY)
+    return false;
+  uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
+  state.normal = decompress_unit_vec(gInfo.x);
+  state.tangent = decompress_unit_vec(gInfo.y);
+  state.bitangent = cross(state.normal, state.tangent);
+  state.texCoord = unpackUnorm2x16(gInfo.z);
+  state.matID = gInfo.w;
+  state.isEmitter = false;
+  state.specularBounce = false;
+  state.isSubsurface = false;
+  state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+
+  return true;
+}
+
 void main() {
   // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
 
@@ -92,7 +112,7 @@ void main() {
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;
   // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
-  
+
   // the seed should be the same as direct stage cause they are using the same push constant value
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
@@ -100,25 +120,17 @@ void main() {
   vec3 pixelColor = vec3(0);
   float depth;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
 
     uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
     depth = imageLoad(thisDirectResultImage, imageCoords).w;
     State state;
-    // state.position = getWorldPos(depth);
-    state.position = ray.origin + ray.direction * depth;
-    state.normal = decompress_unit_vec(gInfo.x);
-    state.tangent = decompress_unit_vec(gInfo.y);
-    state.bitangent = cross(state.normal, state.tangent);
-    state.texCoord = unpackUnorm2x16(gInfo.z);
-    state.matID = gInfo.w;
-    state.isEmitter = false;
-    state.specularBounce = false;
-    state.isSubsurface = false;
-    state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+
+    if(!getStateFromCache(ray, state)) break;
 
     // Filling material structures
-    GetMaterialsAndTextures(state, ray);
+    GetMaterialsAndTextures(state, ray)
+      ;
 
     // Color at vertices
 

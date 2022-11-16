@@ -387,6 +387,7 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
   BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
   bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+  bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
     // Set absorption only if the ray is currently inside the object.
   if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
@@ -430,7 +431,7 @@ bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radianc
   BsdfSampleRec bsdfSampleRec;
   // Sampling for the next ray
   bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
-
+  bsdfSampleRec.L = normalize(bsdfSampleRec.L);
     // Set absorption only if the ray is currently inside the object.
   if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
     absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
@@ -467,6 +468,7 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
   BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
   bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+  bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
     // Set absorption only if the ray is currently inside the object.
   if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
@@ -487,8 +489,6 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
 }
 
 vec3 IndirectSample(Ray r, State state, float hitT) {
-  if(hitT >= INFINITY)
-    return vec3(0.0);
   prd.hitT = hitT;
   vec3 radiance = /*state.mat.emission*/ vec3(0.0);
   vec3 throughput = vec3(1.0);
