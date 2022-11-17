@@ -132,9 +132,9 @@ void main() {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, resv.lightSample.dist));
+    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, resv.lightSample.dist));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));
   }
 }

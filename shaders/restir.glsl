@@ -43,16 +43,26 @@ void resvPreClampedMerge(inout Reservoir resv, Reservoir rhs, float r, int clamp
     resvMerge(resv, rhs, r);
 }
 
-uvec4 encodeResvoir(Reservoir resv) { // doesn't have distance to light
-    return uvec4(packUnormYCbCr(resv.lightSample.Li), compress_unit_vec(resv.lightSample.wi), resv.num, floatBitsToUint(resv.weight));
+// TODO: replace bit shift with mask
+// 32bit Li, 32bit direction, 24bit weight, 16bit num, 24bit dist
+// untested
+uvec4 encodeResvoir(Reservoir resv) {
+    uvec4 pack;
+    pack.x = packUnormYCbCr(resv.lightSample.Li);
+    pack.y = compress_unit_vec(resv.lightSample.wi);
+    pack.z = (resv.num << 16) >> 24;
+    pack.z += (floatBitsToUint(resv.weight) >> 8) << 8;
+    pack.w = (resv.num << 24);
+    pack.w += floatBitsToUint(resv.lightSample.dist) >> 8;
+    return pack;
 }
 
-Reservoir decodeResvoir(uvec4 e, float dist) {
+Reservoir decodeResvoir(uvec4 pack) {
     Reservoir resv;
-    resv.lightSample.Li = unpackUnormYCbCr(e.x);
-    resv.lightSample.wi = decompress_unit_vec(e.y);
-    resv.lightSample.dist = dist;
-    resv.num = e.z;
-    resv.weight = uintBitsToFloat(e.w);
+    resv.lightSample.Li = unpackUnormYCbCr(pack.x);
+    resv.lightSample.wi = decompress_unit_vec(pack.y);
+    resv.weight = uintBitsToFloat((pack.z >> 8) << 8);
+    resv.lightSample.dist = uintBitsToFloat((pack.w << 8) >> 8);
+    resv.num = ((pack.z << 24) >> 16) + (pack.w >> 24);
     return resv;
 }

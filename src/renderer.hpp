@@ -78,7 +78,7 @@ private:
 
   // The luminance can be compressed to 32bit YCbCr
   // The unit vector can also be compressed to 32bit
-  // Direct stage: Li, Direction, Num, Weight
+  // Direct stage: store reservoirs. including Li, Direction, Num, Weight, (dist?)
   // Indirect stage: Li, Direction, Radiance Cache Index, undecided
   VkFormat m_radianceCacheFormat{ VK_FORMAT_R32G32B32A32_UINT };
   nvvk::DescriptorSetBindings m_bind;

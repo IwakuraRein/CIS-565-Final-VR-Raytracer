@@ -658,6 +658,7 @@ vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
   state.isSubsurface = false;
   state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
 
+
   // Filling material structures
   GetMaterialsAndTextures(state, r);
 
@@ -667,12 +668,11 @@ vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
   gInfo.y = compress_unit_vec(state.normal);
   gInfo.z = packUnorm2x16(state.texCoord);
   gInfo.x = packTangent(state.normal, state.tangent);
-  gInfo.x = state.matID << 16 + ((gInfo.x << 16) >> 16);
-  gInfo.x = state.matID << 16;
+  gInfo.x = (state.matID << 16) + (gInfo.x << 16 >> 16);
 
   if(rtxState.debugging_mode > eIndirectStage)
     return DebugInfo(state);
-
+    
   if(state.mat.unlit) {
     return state.mat.emission + state.mat.albedo;
   }
