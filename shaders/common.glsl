@@ -114,7 +114,6 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
 
 // compact hdr color to 32bit
 // TODO: change tone mapping
-// TODO: replace bit shift with mask
 uint packUnormYCbCr(in vec3 c) {
   c = c / (1.0 + c);
   float y = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
@@ -145,7 +144,6 @@ float getZ(float depth) { // untested
   return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);
 }
 
-// TODO: replace bit shift with mask
 uint packTangent(vec3 n, vec3 t){
   vec3 T, B;
   CreateCoordinateSystem(n, T, B);
@@ -158,7 +156,7 @@ uint packTangent(vec3 n, vec3 t){
 vec3 unpackTangent(vec3 n, uint val){
   vec3 T, B;
   CreateCoordinateSystem(n, T, B);
-  float theta = (float((val << 16) >> 16) / 32767.499 - 1.0) * M_PI;
+  float theta = (float(val & 0xFFFF) / 32767.499 - 1.0) * M_PI;
   return normalize(cos(theta) * T + sin(theta) * B);
 }
 
