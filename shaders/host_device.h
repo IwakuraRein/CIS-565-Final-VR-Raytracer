@@ -238,6 +238,23 @@ const int LightType_Spot = 2;
 // custom light source for direct light importance sampling
 const int LightType_Triangle = 3;
 
+// Radiance Cache
+#define SAMPLES_PER_CACHE 8
+#define CACHES_PER_GROUP 4
+struct RadianceCache {
+	vec3 Li[SAMPLES_PER_CACHE];
+	vec3 wi[SAMPLES_PER_CACHE];
+	vec3 normal;
+	float depth;
+};
+struct RadianceCacheStorage {
+	uint Li[SAMPLES_PER_CACHE];
+	uint wi[SAMPLES_PER_CACHE];
+	uint normal;
+	float depth;
+	uint coord; //screen space pixel coordinate
+};
+
 // ReSTIR
 struct LightSample{
 	vec3 Li;

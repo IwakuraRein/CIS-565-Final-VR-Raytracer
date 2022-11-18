@@ -32,63 +32,62 @@
 
 #include <array>
 
-/*
+ /*
 
-Creating the Compute ray query renderer 
-* Requiring:  
-  - Acceleration structure (AccelSctruct / Tlas)
-  - An image (Post StoreImage)
-  - The glTF scene (vertex, index, materials, ... )
+ Creating the Compute ray query renderer
+ * Requiring:
+   - Acceleration structure (AccelSctruct / Tlas)
+   - An image (Post StoreImage)
+   - The glTF scene (vertex, index, materials, ... )
 
-* Usage
-  - setup as usual
-  - create
-  - run
-*/
+ * Usage
+   - setup as usual
+   - create
+   - run
+ */
 class Renderer
 {
 public:
-  void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);
-  void destroy();
-  void create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> rtDescSetLayouts, Scene* scene);
-  void run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames);
-  const std::string name() { return std::string("RQ"); }
-  void update(const VkExtent2D& size);
-  void createImage();
-  void createDescriptorSet();
+	void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount);
+	void destroy();
+	void create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout> rtDescSetLayouts, Scene* scene);
+	void run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames);
+	const std::string name() { return std::string("RQ"); }
+	void update(const VkExtent2D& size);
+	void createImage();
+	void createBuffer();
+	void createDescriptorSet();
 
 private:
-  uint32_t m_nbHit{0};
-  uint32_t m_imageCount;
+	uint32_t m_nbHit{ 0 };
+	uint32_t m_imageCount;
 
 private:
-  // Setup
+	// Setup
 
-  nvvk::ResourceAllocator* m_pAlloc{nullptr};  // Allocator for buffer, images, acceleration structures
-  nvvk::DebugUtil          m_debug;            // Utility to name objects
-  VkDevice                 m_device{VK_NULL_HANDLE};
-  uint32_t                 m_queueIndex{0};
+	nvvk::ResourceAllocator* m_pAlloc{ nullptr };  // Allocator for buffer, images, acceleration structures
+	nvvk::DebugUtil          m_debug;            // Utility to name objects
+	VkDevice                 m_device{ VK_NULL_HANDLE };
+	uint32_t                 m_queueIndex{ 0 };
+	std::array<nvvk::Texture, 2> m_gbuffer;
+	std::array<nvvk::Texture, 2> m_reservoir;
+	//std::array<nvvk::Texture, 2> m_indirectCache;
+	std::array<nvvk::Buffer, 2> m_radianceCache;
+	// Material ID 16bit, Tangent 16bit, Normal, TexCoord, Depth
+	VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
 
-  //std::array<nvvk::Buffer, 2> m_buffer;
-  std::array<nvvk::Texture, 2> m_gbuffer;
-  std::array<nvvk::Texture, 2> m_directCache;
-  std::array<nvvk::Texture, 2> m_indirectCache;
-  // Material ID 16bit, Tangent 16bit, Normal, TexCoord, Depth
-  VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
+	// The luminance can be compressed to 32bit YCbCr
+	// The unit vector can also be compressed to 32bit
+	// Direct stage: store reservoirs. including Li, Direction, Num, Weight, (dist?)
+	VkFormat m_reservoirFormat{ VK_FORMAT_R32G32B32A32_UINT };
+	nvvk::DescriptorSetBindings m_bind;
+	VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
+	VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
+	std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
 
-  // The luminance can be compressed to 32bit YCbCr
-  // The unit vector can also be compressed to 32bit
-  // Direct stage: store reservoirs. including Li, Direction, Num, Weight, (dist?)
-  // Indirect stage: Li, Direction, Radiance Cache Index, undecided
-  VkFormat m_radianceCacheFormat{ VK_FORMAT_R32G32B32A32_UINT };
-  nvvk::DescriptorSetBindings m_bind;
-  VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
-  VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
-  std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
+	VkPipelineLayout m_pipelineLayout{ VK_NULL_HANDLE };
+	VkPipeline       m_directPipeline{ VK_NULL_HANDLE };
+	VkPipeline       m_indirectPipeline{ VK_NULL_HANDLE };
 
-  VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
-  VkPipeline       m_directPipeline{VK_NULL_HANDLE};
-  VkPipeline       m_indirectPipeline{VK_NULL_HANDLE};
-
-  VkExtent2D m_size{};
+	VkExtent2D m_size{};
 };
