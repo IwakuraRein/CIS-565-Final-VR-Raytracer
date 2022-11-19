@@ -55,6 +55,7 @@ ivec2 imageCoords;
 #include "common.glsl"
 #include "traceray_rq.glsl"
 
+#include "restir.glsl"
 #include "pathtrace.glsl"
 
 #define FIREFLIES 1
@@ -83,34 +84,25 @@ ivec2 SampleSizzled() {
 //
 //
 void main() {
-  // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
-
-  ivec2 imageRes = rtxState.size;
-  /*ivec2*/ imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
-
-  // Initialize the seed for the random number only once once
-  // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
-  // prd.seed = s.x + s.y;
-  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
+  if (gl_GlobalInvocationID.x >= rtxState.size.x || gl_GlobalInvocationID.y >= rtxState.size.y) return;
+  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
-  //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
-  float depth;
-  uint luminance;
-  uint dir;
-  // for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+  uvec4 gInfo;
+  Reservoir resv;
+  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
+    Ray ray = raySpawn(imageCoords, rtxState.size);
     
-    vec3 radiance = DirectSample(ray, depth, luminance, dir);
+    vec3 radiance = DirectSample(ray, gInfo, resv);
 
-    // float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    // if(lum > rtxState.fireflyClampThreshold) {
-    //   radiance *= rtxState.fireflyClampThreshold / lum;
-    // }
+    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+    if(lum > rtxState.fireflyClampThreshold) {
+      radiance *= rtxState.fireflyClampThreshold / lum;
+    }
     pixelColor += radiance;
-  // }
-  // pixelColor /= rtxState.spp;
+  }
+  pixelColor /= rtxState.spp;
 
   // Debug - Heatmap
   // if(rtxState.debugging_mode == eHeatmap) {
@@ -126,14 +118,15 @@ void main() {
 
   // Saving pixel color
 
-  imageStore(thisDirectCache, imageCoords, uvec4(luminance, dir, 0, 0));
+  imageStore(thisDirectCache, imageCoords, encodeResvoir(resv));
+  imageStore(thisGbuffer, imageCoords, gInfo);
   if(rtxState.frame > 0) {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, depth));
+    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, depth));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));
   }
 }

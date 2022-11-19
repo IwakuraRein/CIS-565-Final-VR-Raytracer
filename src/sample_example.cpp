@@ -111,6 +111,7 @@ void SampleExample::loadEnvironmentHdr(const std::string& hdrFilename)
 //
 void SampleExample::loadAssets(const char* filename)
 {
+	m_totalFrames = -1;
 	std::string sfile = filename;
 
 	// Need to stop current rendering
@@ -186,8 +187,10 @@ void SampleExample::updateFrame()
 		fov = f;
 	}
 
-	if (m_rtxState.frame < m_maxFrames)
+	if (m_rtxState.frame < m_maxFrames) {
 		m_rtxState.frame++;
+		m_totalFrames++;
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -358,7 +361,7 @@ void SampleExample::drawPost(VkCommandBuffer cmdBuf)
 	vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 	vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-	m_offscreen.run(cmdBuf, m_rtxState, 1.f, size / area);
+	m_offscreen.run(cmdBuf, m_rtxState, m_descaling ? 1.0f / m_descalingLevel : 1.0f, size / area, m_totalFrames);
 
 	if (m_showAxis)
 		m_axis.display(cmdBuf, CameraManip.getMatrix(), m_size);
@@ -390,13 +393,15 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 
 	// Handling de-scaling by reducing the size to render
 	VkExtent2D render_size = m_renderRegion.extent;
+	if (m_descaling)
+		render_size = VkExtent2D{ render_size.width / m_descalingLevel, render_size.height / m_descalingLevel };
 
 	m_rtxState.size = { render_size.width, render_size.height };
 	m_rtxState.time = (uint)(std::chrono::duration<double>(std::chrono::steady_clock::now() - m_start_time).count() * 1000.0);
 
 	// Running the renderer
 	m_pRender->run(cmdBuf, m_rtxState, profiler,
-		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_rtxState), m_scene.getDescSet(), m_descSet });
+		{ m_accelStruct.getDescSet(), m_offscreen.getDescSet(m_totalFrames), m_scene.getDescSet(), m_descSet }, m_totalFrames);
 
 
 	// For automatic brightness tonemapping
@@ -508,6 +513,11 @@ void SampleExample::onMouseMotion(int x, int y)
 
 	if (ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard)
 		return;
+
+	if (m_inputs.lmb || m_inputs.rmb || m_inputs.mmb)
+	{
+		m_descaling = true;
+	}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -515,6 +525,10 @@ void SampleExample::onMouseMotion(int x, int y)
 //
 void SampleExample::onMouseButton(int button, int action, int mods)
 {
-	if (m_busy) return;
 	AppBaseVk::onMouseButton(button, action, mods);
+	if ((m_inputs.lmb || m_inputs.rmb || m_inputs.mmb) == false && action == GLFW_RELEASE && m_descaling == true)
+	{
+		m_descaling = false;
+		resetFrame();
+	}
 }

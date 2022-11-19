@@ -797,7 +797,7 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	nvmath::vec3f eye, center, up;
 	CameraManip.getLookat(eye, center, up);
 
-	vec2 jitter{ (nvmath::nv_random<float>() * 0.5f) / size.width, (nvmath::nv_random<float>() * 0.5f) / size.height };
+	vec2 jitter{ (nvmath::nv_random<float>() /** 0.5f*/) / size.width, (nvmath::nv_random<float>() /** 0.5f*/) / size.height };
 	const auto view = CameraManip.getMatrix();
 	auto proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
 	proj.a02 += jitter.x;

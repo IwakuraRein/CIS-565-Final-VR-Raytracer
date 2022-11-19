@@ -144,4 +144,20 @@ float getZ(float depth) { // untested
   return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);
 }
 
+uint packTangent(vec3 n, vec3 t){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  float theta = acos(dot(t, T)) / M_PI;
+  float phi = acos(dot(t, B));
+  if (phi > M_PI_2) theta = -theta;
+  
+  return uint((theta + 1.0) * 32767.499);
+}
+vec3 unpackTangent(vec3 n, uint val){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  float theta = (float(val & 0xFFFF) / 32767.499 - 1.0) * M_PI;
+  return normalize(cos(theta) * T + sin(theta) * B);
+}
+
 #endif  // RAYCOMMON_GLSL

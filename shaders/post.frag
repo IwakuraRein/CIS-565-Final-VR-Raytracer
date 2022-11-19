@@ -106,7 +106,10 @@ void main() {
     fragColor = vec4(depth, depth, depth, 1.0);
   }
   else if(debugging_mode > eIndirectStage) {
-    fragColor = vec4(texture(inDirectImage, uvCoords * tm.zoom).xyz, 1.0);
+    vec3 color = texture(inDirectImage, uvCoords * tm.zoom).xyz;
+    if (debugging_mode == eBaseColor)
+      color = clamp(pow(color, vec3(0.45454545454545)), 0, 1);
+    fragColor = vec4(color, 1.0);
   }
   else {
     // Raw result of ray tracing
