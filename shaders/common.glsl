@@ -119,15 +119,15 @@ uint packUnormYCbCr(in vec3 c) {
   float y = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
   float cb = -0.169 * c.r - 0.331 * c.g + 0.499 * c.b + 0.5;
   float cr = 0.499 * c.r - 0.418 * c.g - 0.0813 * c.b + 0.5;
-  uint outVal = uint(y * 1048575.0) << 20;
-  outVal += uint(cb * 64.0) << 6;
-  outVal += uint(cr * 64.0);
+  uint outVal = uint(y * 65535.0) << 16;
+  outVal += uint(cb * 255.0) << 8;
+  outVal += uint(cr * 255.0);
   return outVal;
 }
 vec3 unpackUnormYCbCr(in uint c) {
-  float y = ((c >> 20)) / 1048575.0;
-  float cb = ((c << 20) >> 26) / 64.0 - 0.5;
-  float cr = ((c << 26) >> 26) / 64.0 - 0.5;
+  float y = (c >> 16) / 65535.0;
+  float cb = ((c << 16) >> 24) / 255.0 - 0.5;
+  float cr = ((c << 24) >> 24) / 255.0 - 0.5;
 
   float b = cb * 1.772 + y;
   float g = cr * -0.714 - 0.344*cb + y;
