@@ -117,6 +117,14 @@ eTangent = 11   //
 END_ENUM();
 // clang-format on
 
+START_ENUM(ReSTIRState)
+eNone = 0,
+eRIS = 1,
+eSpatial = 2,
+eTemporal = 3,
+eSpatioTemporal = 4
+END_ENUM();
+
 // Camera of the scene
 #define CAMERA_NEAR 0.001f
 #define CAMERA_FAR 100000.0f
@@ -216,7 +224,9 @@ struct RtxState
 	ivec2 size;		// rendering size
 	int minHeatmap; // Debug mode - heat map
 	int maxHeatmap;
+
 	uint time; // How long has the app been running. miliseconds.
+	int restirState;
 };
 
 // Structure used for retrieving the primitive information in the closest hit

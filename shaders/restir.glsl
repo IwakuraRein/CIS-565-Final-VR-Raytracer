@@ -1,5 +1,7 @@
 #include "host_device.h"
 
+const int ReservoirSize = 32;
+
 float resvToScalar(vec3 x) {
     return length(x);
 }

@@ -159,9 +159,15 @@ bool SampleGUI::guiRayTracing()
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
-	changed |= GuiH::Slider("Sampling Rate",
-		"The samples per pixel",
-		&rtxState.spp, nullptr, Normal, 0, 32);
+	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.restirState, nullptr, Normal,
+		{
+			"None",
+			"RIS",
+			"Spatial",
+			"Temporal",
+			"Spatiotemporal"
+		});
+
 	GuiH::Group<bool>("Direct Light", false, [&] {
 		changed |= GuiH::Slider("Environment Weight",
 			"If there is a environment map, the probability it will be used in direct light sampling",

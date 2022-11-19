@@ -55,7 +55,6 @@ ivec2 imageCoords;
 #include "common.glsl"
 #include "traceray_rq.glsl"
 
-#include "restir.glsl"
 #include "pathtrace.glsl"
 
 #define FIREFLIES 1
@@ -132,7 +131,8 @@ void main() {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
+    //imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1.0));
   } else {
     // First frame, replace the value in the buffer
     imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));

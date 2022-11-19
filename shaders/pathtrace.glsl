@@ -33,6 +33,36 @@
 #include "punctual.glsl"
 #include "env_sampling.glsl"
 #include "shade_state.glsl"
+#include "restir.glsl"
+
+const float InvalidPdf = -1.0;
+float dummyPdf;
+
+bool IsPdfInvalid(float p) {
+    return p <= 0.0 || isnan(p);
+}
+
+State GetState(Ray incomingRay) {
+    State state;
+    ShadeState sstate = GetShadeState(prd);
+    state.position = sstate.position;
+    state.normal = sstate.normal;
+    state.tangent = sstate.tangent_u[0];
+    state.bitangent = sstate.tangent_v[0];
+    state.texCoord = sstate.text_coords[0];
+    state.matID = sstate.matIndex;
+    state.isEmitter = false;
+    state.specularBounce = false;
+    state.isSubsurface = false;
+    state.ffnormal = dot(state.normal, incomingRay.direction) <= 0.0 ? state.normal : -state.normal;
+    return state;
+}
+
+bool Occlusion(Ray ray, State state, float dist) {
+    return AnyHit(ray, dist - abs(ray.origin.x - state.position.x) -
+        abs(ray.origin.y - state.position.y) -
+        abs(ray.origin.z - state.position.z));
+}
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
@@ -79,103 +109,6 @@ vec3 DebugInfo(in State state) {
 }
 
 //-----------------------------------------------------------------------
-// Use for light/env contribution
-struct VisibilityContribution {
-  vec3 radiance;   // Radiance at the point if light is visible
-  vec3 lightDir;   // Direction to the light, to shoot shadow ray
-  float lightDist;  // Distance to the light (1e32 for infinite or sky)
-  bool visible;    // true if in front of the face and should shoot shadow ray
-};
-
-//-----------------------------------------------------------------------
-//-----------------------------------------------------------------------
-// VisibilityContribution DirectLight(in Ray r, in State state) {
-//   vec3 Li = vec3(0);
-//   float lightPdf;
-//   vec3 lightContrib;
-//   vec3 lightDir;
-//   float lightDist = 1e32;
-//   bool isLight = false;
-
-//   VisibilityContribution contrib;
-//   contrib.radiance = vec3(0);
-//   contrib.visible = false;
-
-//   // keep it simple and use either point light or environment light, each with the same
-//   // probability. If the environment factor is zero, we always use the point light
-//   // Note: see also miss shader
-//   float p_select_light = rtxState.hdrMultiplier > 0.0f ? 0.5f : 1.0f;
-
-//   // in general, you would select the light depending on the importance of it
-//   // e.g. by incorporating their luminance
-
-//   // Point lights
-//   if(sceneCamera.nbLights != 0 && rand(prd.seed) <= p_select_light) {
-//     isLight = true;
-
-//     // randomly select one of the lights
-//     int light_index = int(min(rand(prd.seed) * sceneCamera.nbLights, sceneCamera.nbLights));
-//     PuncLight light = puncLights[light_index];
-
-//     vec3 pointToLight = -light.direction;
-//     float rangeAttenuation = 1.0;
-//     float spotAttenuation = 1.0;
-
-//     if(light.type != LightType_Directional) {
-//       pointToLight = light.position - state.position;
-//     }
-
-//     lightDist = length(pointToLight);
-
-//     // Compute range and spot light attenuation.
-//     if(light.type != LightType_Directional) {
-//       rangeAttenuation = getRangeAttenuation(light.range, lightDist);
-//     }
-//     if(light.type == LightType_Spot) {
-//       spotAttenuation = getSpotAttenuation(pointToLight, light.direction, light.outerConeCos, light.innerConeCos);
-//     }
-
-//     vec3 intensity = rangeAttenuation * spotAttenuation * light.intensity * light.color;
-
-//     lightContrib = intensity;
-//     lightDir = normalize(pointToLight);
-//     lightPdf = 1.0;
-//   }
-//   // Environment Light
-//   else {
-//     vec4 dirPdf = EnvSample(lightContrib);
-//     lightDir = dirPdf.xyz;
-//     lightPdf = dirPdf.w;
-//   }
-
-//   if(state.isSubsurface || dot(lightDir, state.ffnormal) > 0.0) {
-//     // We should shoot a ray toward the environment and check if it is not
-//     // occluded by an object before doing the following,
-//     // but the call to traceRayEXT have to store
-//     // live states (ex: sstate), which is really costly. So we will do
-//     // all the computation, but adding the contribution at the end of the
-//     // shader.
-//     // See: https://developer.nvidia.com/blog/best-practices-using-nvidia-rtx-ray-tracing/
-//     {
-//       BsdfSampleRec bsdfSampleRec;
-
-//       bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, lightDir, bsdfSampleRec.pdf);
-
-//       float misWeight = isLight ? 1.0 : max(0.0, powerHeuristic(lightPdf, bsdfSampleRec.pdf));
-
-//       Li += misWeight * bsdfSampleRec.f * abs(dot(lightDir, state.ffnormal)) * lightContrib / lightPdf;
-//     }
-
-//     contrib.visible = true;
-//     contrib.lightDir = lightDir;
-//     contrib.lightDist = lightDist;
-//     contrib.radiance = Li;
-//   }
-
-//   return contrib;
-// }
-
-//-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec2 SampleTriangleUniform(vec3 v0, vec3 v1, vec3 v2) {
   float ru = rand(prd.seed);
@@ -190,158 +123,115 @@ float TriangleArea(vec3 v0, vec3 v1, vec3 v2) {
   return length(cross(v1 - v0, v2 - v0)) * 0.5;
 }
 
-vec4 SampleTriangleLight(vec3 x, out vec3 radiance, out float dist) {
-  if(lightBufInfo.trigLightSize == 0)
-    return vec4(-1.0);
+float SampleTriangleLight(vec3 x, out LightSample lightSample) {
+    if (lightBufInfo.trigLightSize == 0) {
+        return InvalidPdf;
+    }
 
-  int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
+    int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.trigLightSize) - 1);
 
-  if(rand(prd.seed) > trigLights[id].impSamp.q)
-    id = trigLights[id].impSamp.alias;
+    if (rand(prd.seed) > trigLights[id].impSamp.q) {
+        id = trigLights[id].impSamp.alias;
+    }
 
-  TrigLight light = trigLights[id];
-  vec4 dirAndPdf;
+    TrigLight light = trigLights[id];
+    vec4 dirAndPdf;
 
-  // vec4 tmp0 = (trigLightTransforms[light.transformIndex] * vec4(light.v0, 1.0));
-  // vec4 tmp1 = (trigLightTransforms[light.transformIndex] * vec4(light.v1, 1.0));
-  // vec4 tmp2 = (trigLightTransforms[light.transformIndex] * vec4(light.v2, 1.0));
-  // vec3 v0 = tmp0.xyz / tmp0.w;
-  // vec3 v1 = tmp1.xyz / tmp1.w;
-  // vec3 v2 = tmp2.xyz / tmp2.w;
+    vec3 v0 = light.v0;
+    vec3 v1 = light.v1;
+    vec3 v2 = light.v2;
 
-  // vec3 v0 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.v0, 1.0));
-  // vec3 v1 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.v1, 1.0));
-  // vec3 v2 = vec3(trigLightTransforms[light.transformIndex] * vec4(light.v2, 1.0));
+    vec3 normal = cross(v1 - v0, v2 - v0);
+    float area = length(normal) * 0.5;
+    normal = normalize(normal);
 
-  vec3 v0 = light.v0;
-  vec3 v1 = light.v1;
-  vec3 v2 = light.v2;
+    vec2 baryCoord = SampleTriangleUniform(v0, v1, v2);
+    vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1 - baryCoord.x - baryCoord.y) * v2;
 
-  vec3 normal = cross(v1 - v0, v2 - v0);
-  float area = length(normal) * 0.5;
-  normal = normalize(normal);
-
-  vec2 baryCoord = SampleTriangleUniform(v0, v1, v2);
-  vec3 y = baryCoord.x * v0 + baryCoord.y * v1 + (1 - baryCoord.x - baryCoord.y) * v2;
-
-  GltfShadeMaterial mat = materials[light.matIndex];
-  vec3 emission = mat.emissiveFactor;
-  if(mat.emissiveTexture > -1) {
-    vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1 - baryCoord.x - baryCoord.y) * light.uv2;
-    emission *= SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
-  }
-  dirAndPdf.xyz = normalize(y - x);
-  dist = length(y - x);
-  dirAndPdf.w = light.impSamp.pdf * dist * dist / (area * abs(dot(dirAndPdf.xyz, normal)));
-  radiance = emission / area;
-  // radiance = emission;
-  return dirAndPdf;
+    GltfShadeMaterial mat = materials[light.matIndex];
+    vec3 emission = mat.emissiveFactor;
+    if (mat.emissiveTexture > -1) {
+        vec2 uv = baryCoord.x * light.uv0 + baryCoord.y * light.uv1 + (1 - baryCoord.x - baryCoord.y) * light.uv2;
+        emission *= SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
+    }
+    float dist = length(y - x);
+    lightSample.Li = emission / area;
+    lightSample.wi = normalize(y - x);
+    lightSample.dist = dist;
+    return light.impSamp.pdf * (dist * dist) / (area * abs(dot(dirAndPdf.xyz, normal)));
 }
 
-vec4 SamplePuncLight(vec3 x, out vec3 radiance, out float dist) {
-  if(lightBufInfo.puncLightSize == 0)
-    return vec4(-1.0);
+float SamplePuncLight(vec3 x, out LightSample lightSample) {
+    if (lightBufInfo.puncLightSize == 0) {
+        return InvalidPdf;
+    }
 
-  int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
+    int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
 
-  if(rand(prd.seed) > puncLights[id].impSamp.q)
-    id = puncLights[id].impSamp.alias;
+    if (rand(prd.seed) > puncLights[id].impSamp.q) {
+        id = puncLights[id].impSamp.alias;
+    }
 
-  PuncLight light = puncLights[id];
-  vec4 dirAndPdf;
-  dirAndPdf.xyz = normalize(light.position - x);
-  dirAndPdf.w = light.impSamp.pdf;
-  dist = length(light.position - x);
-  radiance = light.color * light.intensity / (dist * dist);
-  return dirAndPdf;
+    PuncLight light = puncLights[id];
+    float dist = length(light.position - x);
+    lightSample.Li = light.color * light.intensity / (dist * dist);
+    lightSample.wi = normalize(light.position - x);
+    lightSample.dist = dist;
+    return light.impSamp.pdf;
+}
+
+/*
+* Sample direct light sources without occlusion test
+* Return float: pdf
+*/
+float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
+    float rnd = rand(prd.seed);
+    if (rnd < rtxState.environmentProb) {
+        // Sample environment
+        vec4 dirAndPdf = EnvSample(lightSample.Li);
+        if (IsPdfInvalid(dirAndPdf.w)) {
+            return InvalidPdf;
+        }
+        lightSample.wi = dirAndPdf.xyz;
+        lightSample.dist = 1e24;
+        return dirAndPdf.w * rtxState.environmentProb;
+    }
+    else {
+        float pdf;
+        if (rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
+            // Sample triangle mesh light
+            pdf = SampleTriangleLight(pos, lightSample) * lightBufInfo.trigSampProb;
+        }
+        else {
+            // Sample point light
+            pdf = SamplePuncLight(pos, lightSample) * (1.0 - lightBufInfo.trigSampProb);
+        }
+        return pdf * (1.0 - rtxState.environmentProb);
+    }
+}
+
+vec3 DirectLight(State state, vec3 wo) { // importance sample on light sources
+    LightSample lightSample;
+    float pdf = SampleDirectLightNoVisibility(state.position, lightSample);
+    if (IsPdfInvalid(pdf)) {
+        return vec3(0.0);
+    }
+
+    Ray shadowRay;
+    shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+    shadowRay.direction = lightSample.wi;
+
+    if (Occlusion(shadowRay, state, lightSample.dist)) {
+        return vec3(0.0);
+    }
+    return lightSample.Li * Eval(state, wo, state.ffnormal, lightSample.wi, dummyPdf) *
+        max(dot(state.ffnormal, lightSample.wi), 0.0) / pdf;
 }
 
 vec3 DirectLuminance(in Ray r, in State state, out vec3 luminance, out vec3 dir) { // importance sample on light sources
-  vec4 dirAndPdf;
-  luminance = vec3(0);
-  vec3 Li = vec3(0.0);
-  float dist = INFINITY;
-  float rnd = rand(prd.seed);
-  if(rnd < rtxState.environmentProb) {
-        // Sample environment
-    dirAndPdf = EnvSample(Li);
-    if(dirAndPdf.w <= 0.0)
-      return vec3(0.0);
-    dirAndPdf.w *= rtxState.environmentProb;
-  } else {
-    if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
-          // Sample triangle mesh light
-      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
-      dirAndPdf.w *= lightBufInfo.trigSampProb;
-    } else {
-          // Sample point light
-      dirAndPdf = SamplePuncLight(state.position, Li, dist);
-      dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
-    }
-    if(dirAndPdf.w <= 0.0)
-      return vec3(0.0);
-
-    dirAndPdf.w *= (1.0 - rtxState.environmentProb);
-  }
-  Ray shadowRay;
-  BsdfSampleRec bsdfSampleRec;
-  shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-  shadowRay.direction = dirAndPdf.xyz;
-
-  if(AnyHit(shadowRay, dist - abs(shadowRay.origin.x - state.position.x) -
-    abs(shadowRay.origin.y - state.position.y) -
-    abs(shadowRay.origin.z - state.position.z)))
-    return vec3(0.0);
-  else {
-    bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
-    dir = dirAndPdf.xyz;
-    luminance = Li;
-    return Li * bsdfSampleRec.f *
-      max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w;
-  }
+    return DirectLight(state, -r.direction);
 }
 
-vec3 DirectLight(in Ray r, in State state) { // importance sample on light sources
-  vec4 dirAndPdf;
-  vec3 Li = vec3(0.0);
-  float dist = INFINITY;
-  float rnd = rand(prd.seed);
-  if(rnd < rtxState.environmentProb) {
-        // Sample environment
-    dirAndPdf = EnvSample(Li);
-    if(dirAndPdf.w <= 0.0)
-      return vec3(0.0);
-    dirAndPdf.w *= rtxState.environmentProb;
-  } else {
-    if(rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
-          // Sample triangle mesh light
-      dirAndPdf = SampleTriangleLight(state.position, Li, dist);
-      dirAndPdf.w *= lightBufInfo.trigSampProb;
-    } else {
-          // Sample point light
-      dirAndPdf = SamplePuncLight(state.position, Li, dist);
-      dirAndPdf.w *= 1.0 - lightBufInfo.trigSampProb;
-    }
-    if(dirAndPdf.w <= 0.0)
-      return vec3(0.0);
-
-    dirAndPdf.w *= (1.0 - rtxState.environmentProb);
-  }
-  Ray shadowRay;
-  BsdfSampleRec bsdfSampleRec;
-  shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-  shadowRay.direction = dirAndPdf.xyz;
-
-  if(AnyHit(shadowRay, dist - abs(shadowRay.origin.x - state.position.x) -
-    abs(shadowRay.origin.y - state.position.y) -
-    abs(shadowRay.origin.z - state.position.z)))
-    return vec3(0.0);
-  else {
-    bsdfSampleRec.f = Eval(state, -r.direction, state.ffnormal, shadowRay.direction, bsdfSampleRec.pdf);
-    return Li * bsdfSampleRec.f *
-      max(dot(state.ffnormal, dirAndPdf.xyz), 0.0) / dirAndPdf.w;
-  }
-}
 
 bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
 
@@ -364,7 +254,6 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
       uvec2 cache = imageLoad(thisDirectCache, coord).xy;
       vec3 Li = unpackUnormYCbCr(cache.x);
       vec3 dir = decompress_unit_vec(cache.y);
-      float dummyPdf;
 
       Li *= Eval(state, -r.direction, state.ffnormal, dir, dummyPdf);
       radiance += Li * throughput;
@@ -383,7 +272,7 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
   // add direct light
   float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-    radiance += DirectLight(r, state) * throughput / lightsourceProb;
+    radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
   }
 
   BsdfSampleRec bsdfSampleRec;
@@ -427,7 +316,7 @@ bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radianc
   // add direct light
   float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
   if(rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-    radiance += DirectLight(r, state) * throughput / lightsourceProb;
+    radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
   }
 
   BsdfSampleRec bsdfSampleRec;
@@ -602,8 +491,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
   return radiance;
 }
 
-
-
+/*
 vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
   // for (int id = 0; id < lightBufInfo.trigLightSize; id++){
   //   TrigLight light = trigLights[id];
@@ -722,6 +610,93 @@ vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
       return state.mat.emission;
     }
   }
+}
+*/
+
+vec3 PHat(Reservoir resv, State state, vec3 wo) {
+    return resv.lightSample.Li * Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf) *
+        abs(dot(state.ffnormal, resv.lightSample.wi));
+}
+
+float BigW(Reservoir resv, State state, vec3 wo) {
+    return resv.weight / (resvToScalar(PHat(resv, state, wo)) * float(resv.num));
+}
+
+vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
+    resv.lightSample.Li = vec3(0);
+    ClosestHit(r);
+    gInfo.w = floatBitsToUint(prd.hitT);
+    if (prd.hitT >= INFINITY) {
+        // state.position = vec3(INFINITY) + abs(r.origin);
+
+        vec3 env;
+        if (_sunAndSky.in_use == 1)
+            env = sun_and_sky(_sunAndSky, r.direction);
+        else {
+            vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
+            env = texture(environmentTexture, uv).rgb;
+        }
+        // Done sampling return
+
+        return (env * rtxState.hdrMultiplier);
+    }
+    State state = GetState(r);
+    // Filling material structures
+    GetMaterialsAndTextures(state, r);
+
+    // Color at vertices
+    // state.mat.albedo *= sstate.color;
+    // Normal, Tangent, TexCoord, Material ID
+    gInfo.y = compress_unit_vec(state.normal);
+    gInfo.z = packUnorm2x16(state.texCoord);
+    gInfo.x = packTangent(state.normal, state.tangent);
+    gInfo.x = (state.matID << 16) + (gInfo.x << 16 >> 16);
+
+    if (rtxState.debugging_mode > eIndirectStage)
+        return DebugInfo(state);
+
+    if (state.mat.unlit) {
+        return state.mat.emission + state.mat.albedo;
+    }
+    vec3 wo = -r.direction;
+
+    //vec3 direct= DirectLight(state, -r.direction);
+    vec3 direct = vec3(0.0);
+
+    if (rtxState.restirState == eNone) {
+        direct = DirectLight(state, wo);
+    }
+    else {
+        resvReset(resv);
+        for (int i = 0; i < ReservoirSize; i++) {
+            LightSample lsample;
+            float p = SampleDirectLightNoVisibility(state.position, lsample);
+
+            vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
+            float weight = resvToScalar(g / p);
+
+            if (IsPdfInvalid(p) || isnan(weight)) {
+                weight = 0.0;
+            }
+            resvUpdate(resv, lsample, weight, rand(prd.seed));
+        }
+
+        LightSample lsample = resv.lightSample;
+        Ray shadowRay;
+        shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+        shadowRay.direction = lsample.wi;
+
+        if (Occlusion(shadowRay, state, lsample.dist)) {
+            resv.weight = 0.0;
+        }
+
+        if (!resvInvalid(resv)) {
+            direct = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) *
+                abs(dot(state.ffnormal, lsample.wi)) * BigW(resv, state, wo);
+        }
+    }
+
+    return state.mat.emission + direct;
 }
 
 //-----------------------------------------------------------------------
