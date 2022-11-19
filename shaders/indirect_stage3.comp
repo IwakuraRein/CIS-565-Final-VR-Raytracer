@@ -128,6 +128,9 @@ void main() {
   Ray ray = raySpawn(imageCoords, rtxState.size);
 
   if(getStateFromCache(ray, state, depth)) {
+    for (int i = 0; i < CACHES_PER_GROUP; i++){
+      if (radianceCaches[i].coords == imageCoords) return;
+    }
     int count = 0;
     for (int i = 0; i < CACHES_PER_GROUP; i++){
       RadianceCacheStorage RC = radianceCaches[i];
@@ -137,7 +140,7 @@ void main() {
           BsdfSampleRec bsdfSampleRec;
           bsdfSampleRec.f = Eval(state, -ray.direction, state.ffnormal, wi, bsdfSampleRec.pdf);
           if (bsdfSampleRec.pdf > 0) {
-            pixelColor += unpackUnormYCbCr(RC.Li[ii]) * bsdfSampleRec.f * abs(dot(state.ffnormal, wi)) / bsdfSampleRec.pdf;
+            pixelColor += /*unpackUnormYCbCr*/(RC.Li[ii]) * bsdfSampleRec.f * abs(dot(state.ffnormal, wi)) / bsdfSampleRec.pdf;
             count++;
           }
         }

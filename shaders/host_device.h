@@ -249,7 +249,7 @@ struct RadianceCache {
 };
 struct RadianceCacheStorage {
 	float depth;
-	uint Li[SAMPLES_PER_CACHE];
+	vec3 Li[SAMPLES_PER_CACHE];
 	uint wi[SAMPLES_PER_CACHE];
 	uint normal;
 	ivec2 coords; //screen space pixel coordinate
