@@ -464,15 +464,15 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
     return false;
   }
 
-    // Add absoption (transmission / volume)
+  // Add absoption (transmission / volume)
   throughput *= exp(-absorption * prd.hitT);
 
   BsdfSampleRec bsdfSampleRec;
-    // Sampling for the next ray
+  // Sampling for the next ray
   bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
   bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
-    // Set absorption only if the ray is currently inside the object.
+  // Set absorption only if the ray is currently inside the object.
   if(dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
     absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
   }
@@ -483,24 +483,22 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
     return false;
   }
 
-    // Next ray
+  // Next ray
   r.direction = bsdfSampleRec.L;
   r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
 
   return true;
 }
 
-vec3 IndirectSample(Ray r, State state, float hitT, out uint dir) {
+vec3 IndirectSample(Ray r, State state, float hitT, out vec3 firstBsdf, out vec3 wi) {
   prd.hitT = hitT;
   vec3 radiance = /*state.mat.emission*/ vec3(0.0);
   vec3 throughput = vec3(1.0);
   vec3 absorption = vec3(0.0);
-
+  firstBsdf = vec3(1.0);
   { // first intersection
     // we don't want to reintroduce the luminance that direct stage has already done
-    bool shouldReturn = UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption);
-    dir = compress_unit_vec(r.direction);
-    if (shouldReturn)
+    if (!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption))
       return radiance;
 #ifdef RR
     // For Russian-Roulette (minimizing live state)
@@ -510,6 +508,9 @@ vec3 IndirectSample(Ray r, State state, float hitT, out uint dir) {
     throughput /= rrPcont;  // boost the energy of the non-terminated paths
 #endif
   }
+  
+  firstBsdf = throughput;
+  wi = r.direction;
 
   { // second intersection
     ClosestHit(r);
