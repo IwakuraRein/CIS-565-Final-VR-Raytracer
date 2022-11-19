@@ -56,8 +56,8 @@ layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ Imp
 
 layout(set = S_RAYQ, binding = eLastDirectCache)   uniform uimage2D lastDirectCache;
 layout(set = S_RAYQ, binding = eThisDirectCache)   uniform uimage2D thisDirectCache;
-layout(set = S_RAYQ, binding = eLastIndirectCache, scalar) buffer _LastRadianceCache { RadianceCacheStorage lastRadianceCache[]; };
-layout(set = S_RAYQ, binding = eThisIndirectCache, scalar) buffer _ThisRadianceCache { RadianceCacheStorage thisRadianceCache[]; }; 
+layout(set = S_RAYQ, binding = eLastIndirectCache) uniform readonly uimage2D lastIndirectCache; 
+layout(set = S_RAYQ, binding = eThisIndirectCache) uniform uimage2D thisIndirectCache; 
 layout(set = S_RAYQ, binding = eLastGbuffer)       uniform readonly uimage2D lastGbuffer; 
 layout(set = S_RAYQ, binding = eThisGbuffer)       uniform uimage2D thisGbuffer; 
 

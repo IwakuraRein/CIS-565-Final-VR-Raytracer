@@ -84,15 +84,23 @@ ivec2 SampleSizzled() {
 //
 //
 void main() {
-  if (gl_GlobalInvocationID.x >= rtxState.size.x || gl_GlobalInvocationID.y >= rtxState.size.y) return;
-  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
+
+  ivec2 imageRes = rtxState.size;
+  /*ivec2*/ imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+
+  // Initialize the seed for the random number only once once
+  // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
+  // prd.seed = s.x + s.y;
+  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
+  //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
   uvec4 gInfo;
   Reservoir resv;
   for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-    Ray ray = raySpawn(imageCoords, rtxState.size);
+    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
     vec3 radiance = DirectSample(ray, gInfo, resv);
 
