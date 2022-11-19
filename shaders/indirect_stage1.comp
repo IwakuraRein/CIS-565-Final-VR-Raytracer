@@ -114,8 +114,8 @@ struct GeoInfo{
 };
 shared GeoInfo geoInfos[CACHES_PER_GROUP]; // store normal and depth
 // store radiance cache
-shared vec3 Li[CACHES_PER_GROUP][SAMPLES_PER_CACHE];
-shared vec3 wi[CACHES_PER_GROUP][SAMPLES_PER_CACHE];
+// shared vec3 Li[CACHES_PER_GROUP][SAMPLES_PER_CACHE];
+// shared vec3 wi[CACHES_PER_GROUP][SAMPLES_PER_CACHE];
 
 void main() {
   imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
@@ -160,49 +160,49 @@ void main() {
       RadianceCacheStorage radianceCache;
       radianceCache.normal = compress_unit_vec(state.ffnormal);
       radianceCache.depth  = depth;
-      radianceCache.coord  = imageCoords.x * rtxState.size.x + imageCoords.y * rtxState.size.y;
-      vec3 bsdf, radiance;
-      for (int i = 0; i < SAMPLES_PER_CACHE; i++) {
-        radiance = IndirectSample(ray, state, depth, bsdf, wi[wantToWrite][i]);
-        Li[wantToWrite][i] = radiance / bsdf;
-        radianceCache.Li[i] = packUnormYCbCr(Li[wantToWrite][i]);
-        radianceCache.wi[i] = compress_unit_vec(wi[wantToWrite][i]);
-        pixelColor += radiance;
-      }
+      radianceCache.coords  = imageCoords;
+      // vec3 bsdf, radiance;
+      // for (int i = 0; i < SAMPLES_PER_CACHE; i++) {
+      //   radiance = IndirectSample(ray, state, depth, bsdf, wi[wantToWrite][i]);
+      //   Li[wantToWrite][i] = radiance / bsdf;
+      //   radianceCache.Li[i] = packUnormYCbCr(Li[wantToWrite][i]);
+      //   radianceCache.wi[i] = compress_unit_vec(wi[wantToWrite][i]);
+      //   pixelColor += radiance;
+      // }
 
-      thisRadianceCache[gl_WorkGroupID.x * gl_NumWorkGroups.x + gl_WorkGroupID.y * CACHES_PER_GROUP + wantToWrite] = radianceCache;
+      thisRadianceCache[(gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * CACHES_PER_GROUP + wantToWrite] = radianceCache;
 
-      pixelColor /= SAMPLES_PER_CACHE;
+      // pixelColor /= SAMPLES_PER_CACHE;
     }
-    barrier();
-    if(!willWrite) { // shade with radiance cache
-      int count = 0;
-      for (int i = 0; i < CACHES_PER_GROUP; i++){
-        if(abs(geoInfos[i].depth - depth) < depth * 0.1/* && dot(geoInfos[i].normal, state.ffnormal) > 0*/) {
-          for (int ii = 0; ii < SAMPLES_PER_CACHE; ii++) {
-            BsdfSampleRec bsdfSampleRec;
-            bsdfSampleRec.f = Eval(state, -ray.direction, state.ffnormal, wi[i][ii], bsdfSampleRec.pdf);
-            if (bsdfSampleRec.pdf > 0) {
-              pixelColor += max(Li[i][ii] * bsdfSampleRec.f * abs(dot(state.ffnormal, wi[i][ii])) / bsdfSampleRec.pdf, 0);
-              count++;
-            }
-          }
-        }
-      }
-      if (count > 0) pixelColor /= count;
-    }
+  //   barrier();
+  //   if(!willWrite) { // shade with radiance cache
+  //     int count = 0;
+  //     for (int i = 0; i < CACHES_PER_GROUP; i++){
+  //       if(abs(geoInfos[i].depth - depth) < depth * 0.1/* && dot(geoInfos[i].normal, state.ffnormal) > 0*/) {
+  //         for (int ii = 0; ii < SAMPLES_PER_CACHE; ii++) {
+  //           BsdfSampleRec bsdfSampleRec;
+  //           bsdfSampleRec.f = Eval(state, -ray.direction, state.ffnormal, wi[i][ii], bsdfSampleRec.pdf);
+  //           if (bsdfSampleRec.pdf > 0) {
+  //             pixelColor += max(Li[i][ii] * bsdfSampleRec.f * abs(dot(state.ffnormal, wi[i][ii])) / bsdfSampleRec.pdf, 0);
+  //             count++;
+  //           }
+  //         }
+  //       }
+  //     }
+  //     if (count > 0) pixelColor /= count;
+  //   }
 
-    float lum = dot(pixelColor, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold) {
-      pixelColor *= rtxState.fireflyClampThreshold / lum;
-    }
+  //   float lum = dot(pixelColor, vec3(0.212671f, 0.715160f, 0.072169f));
+  //   if(lum > rtxState.fireflyClampThreshold) {
+  //     pixelColor *= rtxState.fireflyClampThreshold / lum;
+  //   }
   }
 
-  if(rtxState.frame > 0) {
-    vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
-    vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 1.0));
-  } else {
-    imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 1.0));
-  }
+  // if(rtxState.frame > 0) {
+  //   vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
+  //   vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
+  //   imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 1.0));
+  // } else {
+  //   imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 1.0));
+  // }
 }

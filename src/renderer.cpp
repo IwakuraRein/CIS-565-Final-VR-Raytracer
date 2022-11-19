@@ -35,7 +35,9 @@
 
   // Shaders
 #include "autogen/direct_stage.comp.h"
-#include "autogen/indirect_stage.comp.h"
+#include "autogen/indirect_stage1.comp.h"
+#include "autogen/indirect_stage2.comp.h"
+#include "autogen/indirect_stage3.comp.h"
 //--------------------------------------------------------------------------------------------------
 //
 //
@@ -63,12 +65,16 @@ void Renderer::destroy()
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
 	vkDestroyPipeline(m_device, m_directPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_indirectPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_indirectPipeline1, nullptr);
+	vkDestroyPipeline(m_device, m_indirectPipeline2, nullptr);
+	vkDestroyPipeline(m_device, m_indirectPipeline3, nullptr);
 	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 
 	m_pipelineLayout = VK_NULL_HANDLE;
 	m_directPipeline = VK_NULL_HANDLE;
-	m_indirectPipeline = VK_NULL_HANDLE;
+	m_indirectPipeline1 = VK_NULL_HANDLE;
+	m_indirectPipeline2 = VK_NULL_HANDLE;
+	m_indirectPipeline3 = VK_NULL_HANDLE;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -103,16 +109,24 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, direct_stage_comp, sizeof(direct_stage_comp));
 	computePipelineCreateInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 	computePipelineCreateInfo.stage.pName = "main";
-
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_directPipeline);
-
 	m_debug.setObjectName(m_directPipeline, "Renderer-Direct");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
 
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
 
-	m_debug.setObjectName(m_indirectPipeline, "RendererIndirect");
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage1_comp, sizeof(indirect_stage1_comp));
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline1);
+	m_debug.setObjectName(m_indirectPipeline1, "RendererIndirect1");
+	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage2_comp, sizeof(indirect_stage2_comp));
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline2);
+	m_debug.setObjectName(m_indirectPipeline2, "RendererIndirect2");
+	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage3_comp, sizeof(indirect_stage3_comp));
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline3);
+	m_debug.setObjectName(m_indirectPipeline3, "RendererIndirect3");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 	timer.print();
@@ -125,7 +139,6 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 #define GROUP_SIZE 8  // Same group size as in compute shader
 void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames)
 {
-
 	// Preparing for the compute shader
 	descSets.push_back(m_descSet[(frames + 1) % 2]);
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
@@ -139,7 +152,18 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 
 	// Create Radiance Cache
-	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline1);
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+
+	// Path trace radiance cache
+	size_t size = (m_size.width + GROUP_SIZE - 1) / GROUP_SIZE;
+	size *= (m_size.height + GROUP_SIZE - 1) / GROUP_SIZE;
+	size *= CACHES_PER_GROUP;
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline2);
+	vkCmdDispatch(cmdBuf, (size + (GROUP_SIZE - 1)) / GROUP_SIZE, 1, 1);
+
+	// Shade from radiance cache
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline3);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 }
 

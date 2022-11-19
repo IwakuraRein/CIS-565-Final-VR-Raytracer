@@ -252,7 +252,7 @@ struct RadianceCacheStorage {
 	uint Li[SAMPLES_PER_CACHE];
 	uint wi[SAMPLES_PER_CACHE];
 	uint normal;
-	uint coord; //screen space pixel coordinate
+	ivec2 coords; //screen space pixel coordinate
 };
 
 // ReSTIR
