@@ -159,7 +159,7 @@ bool SampleGUI::guiRayTracing()
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
-	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.restirState, nullptr, Normal,
+	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.ReSTIRState, nullptr, Normal,
 		{
 			"None",
 			"RIS",
@@ -167,6 +167,8 @@ bool SampleGUI::guiRayTracing()
 			"Temporal",
 			"Spatiotemporal"
 		});
+
+	changed |= GuiH::Slider("RIS Repeat", "", &rtxState.RISRepeat, nullptr, Normal, 1, 64);
 
 	GuiH::Group<bool>("Direct Light", false, [&] {
 		changed |= GuiH::Slider("Environment Weight",

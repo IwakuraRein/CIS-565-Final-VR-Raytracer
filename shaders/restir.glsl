@@ -45,9 +45,17 @@ void resvPreClampedMerge(inout Reservoir resv, Reservoir rhs, float r, int clamp
     resvMerge(resv, rhs, r);
 }
 
+void resvPreClampedMerge20(inout Reservoir resv, Reservoir rhs, float r) {
+    if (rhs.num > 0 && resv.num > 0 && rhs.num > 19 * resv.num) {
+        rhs.weight *= float(19) * float(resv.num) / float(rhs.num);
+        rhs.num = 19 * resv.num;
+    }
+    resvMerge(resv, rhs, r);
+}
+
 // 32bit Li, 32bit direction, 24bit weight, 16bit num, 24bit dist
 // untested
-uvec4 encodeResvoir(Reservoir resv) {
+uvec4 encodeReservoir(Reservoir resv) {
     uvec4 pack;
     resv.num = resv.num & 0xFFFF;
     pack.x = packUnormYCbCr(resv.lightSample.Li);
@@ -59,7 +67,7 @@ uvec4 encodeResvoir(Reservoir resv) {
     return pack;
 }
 
-Reservoir decodeResvoir(uvec4 pack) {
+Reservoir decodeReservoir(uvec4 pack) {
     Reservoir resv;
     resv.lightSample.Li = unpackUnormYCbCr(pack.x);
     resv.lightSample.wi = decompress_unit_vec(pack.y);

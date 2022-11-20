@@ -59,6 +59,9 @@ void Renderer::destroy()
 	m_pAlloc->destroy(m_directCache[1]);
 	m_pAlloc->destroy(m_indirectCache[0]);
 	m_pAlloc->destroy(m_indirectCache[1]);
+	m_pAlloc->destroy(m_directReservoir[0]);
+	m_pAlloc->destroy(m_directReservoir[1]);
+
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
@@ -85,6 +88,7 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 
 	// Create Gbuffer
 	createImage();
+	createBuffer();
 
 	createDescriptorSet();
 	rtDescSetLayouts.push_back(m_descSetLayout);
@@ -151,28 +155,39 @@ void Renderer::update(const VkExtent2D& size) {
 		m_pAlloc->destroy(m_directCache[1]);
 		m_pAlloc->destroy(m_indirectCache[0]);
 		m_pAlloc->destroy(m_indirectCache[1]);
+		m_pAlloc->destroy(m_directReservoir[0]);
+		m_pAlloc->destroy(m_directReservoir[1]);
 		createImage();
+		createBuffer();
 
 		VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 			| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		std::array<VkWriteDescriptorSet, 8> writes;
+		VkDeviceSize resvSize = size.width * size.height * sizeof(Reservoir);
 
-		std::array<VkWriteDescriptorSet, 6> writes;
-		writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_gbuffer[0].descriptor);
-		writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_gbuffer[1].descriptor);
-		writes[2] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDirectCache, &m_directCache[0].descriptor);
-		writes[3] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDirectCache, &m_directCache[1].descriptor);
-		writes[4] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastIndirectCache, &m_indirectCache[0].descriptor);
-		writes[5] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisIndirectCache, &m_indirectCache[1].descriptor);
-		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-		writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_gbuffer[1].descriptor);
-		writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_gbuffer[0].descriptor);
-		writes[2] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
-		writes[3] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
-		writes[4] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
-		writes[5] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
-		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+		for (int i = 0; i < 2; i++) {
+			VkDescriptorBufferInfo lastDirectResvBufInfo = { m_directReservoir[i].buffer, 0, resvSize };
+			VkDescriptorBufferInfo thisDirectResvBufInfo = { m_directReservoir[!i].buffer, 0, resvSize };
+
+			writes[0] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastGbuffer, &m_gbuffer[i].descriptor);
+			writes[1] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisGbuffer, &m_gbuffer[!i].descriptor);
+			writes[2] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectCache, &m_directCache[i].descriptor);
+			writes[3] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectCache, &m_directCache[!i].descriptor);
+			writes[4] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastIndirectCache, &m_indirectCache[i].descriptor);
+			writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisIndirectCache, &m_indirectCache[!i].descriptor);
+			writes[6] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectResv, &lastDirectResvBufInfo);
+			writes[7] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectResv, &thisDirectResvBufInfo);
+			vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+		}
 	//}
+}
+
+void Renderer::createBuffer()
+{
+	VkDeviceSize size = m_size.width * m_size.height * sizeof(Reservoir);
+	m_directReservoir[0] = m_pAlloc->createBuffer(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	m_directReservoir[1] = m_pAlloc->createBuffer(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 }
 
 void Renderer::createImage()
@@ -249,24 +264,29 @@ void Renderer::createDescriptorSet()
 	m_bind.addBinding({ RayQBindings::eThisDirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 	m_bind.addBinding({ RayQBindings::eLastIndirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 	m_bind.addBinding({ RayQBindings::eThisIndirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eLastDirectResv, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	m_bind.addBinding({ RayQBindings::eThisDirectResv, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 
 	m_descPool = m_bind.createPool(m_device, m_descSet.size());
 	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
 	CREATE_NAMED_VK(m_descSet[0], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 	CREATE_NAMED_VK(m_descSet[1], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
-	std::array<VkWriteDescriptorSet, 6> writes;
-	writes[0] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastGbuffer, &m_gbuffer[0].descriptor);
-	writes[1] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisGbuffer, &m_gbuffer[1].descriptor);
-	writes[2] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastDirectCache, &m_directCache[0].descriptor);
-	writes[3] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisDirectCache, &m_directCache[1].descriptor);
-	writes[4] = m_bind.makeWrite(m_descSet[0], RayQBindings::eLastIndirectCache, &m_indirectCache[0].descriptor);
-	writes[5] = m_bind.makeWrite(m_descSet[0], RayQBindings::eThisIndirectCache, &m_indirectCache[1].descriptor);
-	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-	writes[0] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastGbuffer, &m_gbuffer[1].descriptor);
-	writes[1] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisGbuffer, &m_gbuffer[0].descriptor);
-	writes[2] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastDirectCache, &m_directCache[1].descriptor);
-	writes[3] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisDirectCache, &m_directCache[0].descriptor);
-	writes[4] = m_bind.makeWrite(m_descSet[1], RayQBindings::eLastIndirectCache, &m_indirectCache[1].descriptor);
-	writes[5] = m_bind.makeWrite(m_descSet[1], RayQBindings::eThisIndirectCache, &m_indirectCache[0].descriptor);
-	vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+
+	std::array<VkWriteDescriptorSet, 8> writes;
+	VkDeviceSize resvSize = m_size.width * m_size.height * sizeof(Reservoir);
+
+	for (int i = 0; i < 2; i++) {
+		VkDescriptorBufferInfo lastDirectResvBufInfo = { m_directReservoir[i].buffer, 0, resvSize };
+		VkDescriptorBufferInfo thisDirectResvBufInfo = { m_directReservoir[!i].buffer, 0, resvSize };
+
+		writes[0] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastGbuffer, &m_gbuffer[i].descriptor);
+		writes[1] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisGbuffer, &m_gbuffer[!i].descriptor);
+		writes[2] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectCache, &m_directCache[i].descriptor);
+		writes[3] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectCache, &m_directCache[!i].descriptor);
+		writes[4] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastIndirectCache, &m_indirectCache[i].descriptor);
+		writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisIndirectCache, &m_indirectCache[!i].descriptor);
+		writes[6] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectResv, &lastDirectResvBufInfo);
+		writes[7] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectResv, &thisDirectResvBufInfo);
+		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	}
 }

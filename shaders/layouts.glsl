@@ -60,6 +60,8 @@ layout(set = S_RAYQ, binding = eLastIndirectCache) uniform readonly uimage2D las
 layout(set = S_RAYQ, binding = eThisIndirectCache) uniform uimage2D thisIndirectCache; 
 layout(set = S_RAYQ, binding = eLastGbuffer)       uniform readonly uimage2D lastGbuffer; 
 layout(set = S_RAYQ, binding = eThisGbuffer)       uniform uimage2D thisGbuffer; 
+layout(set = S_RAYQ, binding = eLastDirectResv, scalar) buffer _LastDirectResv { Reservoir lastDirectResv[]; };
+layout(set = S_RAYQ, binding = eThisDirectResv, scalar) buffer _ThisDirectResv { Reservoir thisDirectResv[]; };
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

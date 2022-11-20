@@ -54,6 +54,7 @@ public:
   void run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames);
   const std::string name() { return std::string("RQ"); }
   void update(const VkExtent2D& size);
+  void createBuffer();
   void createImage();
   void createDescriptorSet();
 
@@ -73,6 +74,7 @@ private:
   std::array<nvvk::Texture, 2> m_gbuffer;
   std::array<nvvk::Texture, 2> m_directCache;
   std::array<nvvk::Texture, 2> m_indirectCache;
+  std::array<nvvk::Buffer, 2> m_directReservoir;
   // Material ID 16bit, Tangent 16bit, Normal, TexCoord, Depth
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
 
@@ -91,4 +93,6 @@ private:
   VkPipeline       m_indirectPipeline{VK_NULL_HANDLE};
 
   VkExtent2D m_size{};
+
+  int m_frameInd = 0;
 };

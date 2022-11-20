@@ -97,7 +97,9 @@ eThisGbuffer = 1,
 eLastDirectCache = 2,
 eLastIndirectCache = 3,
 eThisDirectCache = 4,
-eThisIndirectCache = 5
+eThisIndirectCache = 5,
+eLastDirectResv = 6,
+eThisDirectResv = 7
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -226,7 +228,12 @@ struct RtxState
 	int maxHeatmap;
 
 	uint time; // How long has the app been running. miliseconds.
-	int restirState;
+	int ReSTIRState;
+#ifdef __cplusplus
+	int RISRepeat = 32;
+#else
+	int RISRepeat;
+#endif
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -254,6 +261,7 @@ struct LightSample{
 	vec3 wi;
 	float dist;
 };
+
 struct Reservoir {
 	LightSample lightSample;
 	uint num;
