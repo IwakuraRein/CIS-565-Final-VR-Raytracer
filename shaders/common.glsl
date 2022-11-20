@@ -115,10 +115,11 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
 // compact hdr color to 32bit
 // TODO: change tone mapping
 uint packUnormYCbCr(in vec3 c) {
+  // c = pow(c, vec3(0.5, 0.5, 0.5));
   c = c / (1.0 + c);
   float y = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-  float cb = -0.169 * c.r - 0.331 * c.g + 0.499 * c.b + 0.5;
-  float cr = 0.499 * c.r - 0.418 * c.g - 0.0813 * c.b + 0.5;
+  float cb = -0.16873589 * c.r -0.33126411 * c.g + 0.5 * c.b + 0.5;
+  float cr = 0.5 * c.r -0.41868759 * c.g -0.08131241 * c.b + 0.5;
   uint outVal = uint(y * 65535.0) << 16;
   outVal += uint(cb * 255.0) << 8;
   outVal += uint(cr * 255.0);
@@ -130,9 +131,10 @@ vec3 unpackUnormYCbCr(in uint c) {
   float cr = ((c << 24) >> 24) / 255.0 - 0.5;
 
   float b = cb * 1.772 + y;
-  float g = cr * -0.714 - 0.344*cb + y;
   float r = y + 1.402 * cr;
+  float g = (y - 0.299 * r - 0.114 * b) / 0.587;
   vec3 rgb = vec3(r, g, b);
+  // return pow(rgb / (1.0 - rgb), vec3(2,2,2));
   return rgb / (1.0 - rgb);
 }
 
