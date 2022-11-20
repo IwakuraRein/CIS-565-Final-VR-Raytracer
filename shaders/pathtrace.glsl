@@ -250,12 +250,10 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
         // TODO: adjust offset according to normal
         if (getDepth(ndc.z) <= (screenDepth + 1e-3)) {
             ivec2 coord = ivec2(round(ndc.x * rtxState.size.x), round(ndc.y * rtxState.size.y));
-            uvec2 cache = imageLoad(thisDirectCache, coord).xy;
-            vec3 Li = unpackUnormYCbCr(cache.x);
-            vec3 dir = decompress_unit_vec(cache.y);
+            LightSample cache = thisDirectResv[coord.y * rtxState.size.x + coord.x].lightSample;
 
-            Li *= Eval(state, -r.direction, state.ffnormal, dir, dummyPdf);
-            radiance += Li * throughput;
+            cache.Li *= Eval(state, -r.direction, state.ffnormal, cache.wi, dummyPdf);
+            radiance += cache.Li * throughput;
         }
     }
 
@@ -678,8 +676,10 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
     //vec3 direct= DirectLight(state, -r.direction);
     vec3 direct = vec3(0.0);
 
+  float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
+  if(rand(prd.seed) < lightsourceProb) {
     if (rtxState.ReSTIRState == eNone) {
-        direct = DirectLight(state, wo);
+        direct = DirectLight(state, wo) / lightsourceProb;
     }
     else {
         Reservoir resv;
@@ -732,11 +732,44 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
               abs(dot(state.ffnormal, lsample.wi)) * BigW(resv, state, wo);
             */
             vec3 LiBsdf = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf);
-            direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num);
+            direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num) / lightsourceProb;
 
             if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
                 direct = vec3(0.0);
             }
+        }
+    }
+  }
+    else{
+        Ray shadowRay;
+        BsdfSampleRec bsdfSampleRec;
+        bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+
+        if(bsdfSampleRec.pdf > 0.0) {
+            vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+            shadowRay.direction = bsdfSampleRec.L;
+            shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+            ClosestHit(shadowRay);
+            if(prd.hitT >= INFINITY) {
+                vec3 env;
+                if(_sunAndSky.in_use == 1)
+                env = sun_and_sky(_sunAndSky, shadowRay.direction);
+                else {
+                vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
+                env = texture(environmentTexture, uv).rgb;
+                }
+                // Done sampling return
+                direct = (env * rtxState.hdrMultiplier) * throughput;
+            }
+            else {
+                State state2;
+                ShadeState sstate = GetShadeState(prd);
+                state2.matID = sstate.matIndex;
+                state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
+                GetMaterialsAndTextures(state2, shadowRay);
+
+                direct = state2.mat.emission * throughput / (1.0 - lightsourceProb);
+            } 
         }
     }
     return state.mat.emission + direct;
