@@ -194,7 +194,7 @@ float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
             return InvalidPdf;
         }
         lightSample.wi = dirAndPdf.xyz;
-        lightSample.dist = 1e24;
+        lightSample.dist = INFINITY;
         return dirAndPdf.w * rtxState.environmentProb;
     }
     else {
@@ -705,10 +705,8 @@ void cacheTempReservoir(Reservoir resv) {
 vec3 DirectSample(Ray r) {
     uvec4 gInfo;
     ClosestHit(r);
-    //gInfo.w = floatBitsToUint(prd.hitT);
 
     if (prd.hitT >= INFINITY) {
-        // state.position = vec3(INFINITY) + abs(r.origin);
 
         vec3 env;
         if (_sunAndSky.in_use == 1)
@@ -718,7 +716,7 @@ vec3 DirectSample(Ray r) {
             env = texture(environmentTexture, uv).rgb;
         }
         // Done sampling return
-        imageStore(thisGbuffer, imageCoords, uvec4(0, 0, 0, NullMatId));
+        imageStore(thisGbuffer, imageCoords, uvec4(0, 0, floatBitsToUint(INFINITY), NullMatId));
         return (env * rtxState.hdrMultiplier);
     }
     State state = GetState(r);

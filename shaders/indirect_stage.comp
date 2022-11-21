@@ -86,16 +86,16 @@ ivec2 SampleSizzled() {
 // TODO: fix tangent
 bool getStateFromCache(Ray ray, out State state, out float depth) {
   uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
-  depth = uintBitsToFloat(gInfo.w);
+  depth = uintBitsToFloat(gInfo.z);
   if(depth >= INFINITY)
     return false;
   state.position = ray.origin + ray.direction * depth;
   state.normal = decompress_unit_vec(gInfo.y);
-  state.tangent = unpackTangent(state.normal, gInfo.x);
+  //state.tangent = unpackTangent(state.normal, gInfo.x);
   state.bitangent = cross(state.normal, state.tangent);
-  //CreateCoordinateSystem(state.normal, state.tangent, state.bitangent);
+  CreateCoordinateSystem(state.normal, state.tangent, state.bitangent);
   state.texCoord = unpackUnorm2x16(gInfo.z);
-  state.matID = gInfo.x >> 16;
+  state.matID = gInfo.w;
   state.isEmitter = false;
   state.specularBounce = false;
   state.isSubsurface = false;

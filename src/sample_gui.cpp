@@ -177,8 +177,10 @@ bool SampleGUI::guiRayTracing()
 		return changed;
 		});
 	GuiH::Group<bool>("Indirect Light", false, [&] {
-		ImGui::Text("Place Holder");
-		return true;
+		changed |= GuiH::Slider("Sample Rate",
+			"Samples per pixel",
+			&rtxState.spp, nullptr, Normal, 0, 16);
+		return changed;
 		});
 	return changed;
 }

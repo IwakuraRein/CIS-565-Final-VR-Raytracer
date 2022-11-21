@@ -75,7 +75,7 @@ private:
   //std::array<nvvk::Texture, 2> m_directCache;
   //std::array<nvvk::Texture, 2> m_indirectCache;
   std::array<nvvk::Buffer, 2> m_directReservoir;
-  // Material ID 16bit, Tangent 16bit, Normal, TexCoord, Depth
+  // Normal, TexCoord, Depth, Material ID
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
 
   // The luminance can be compressed to 32bit YCbCr
