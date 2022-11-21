@@ -140,9 +140,10 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 
 	// Dispatching the shader
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
-
+#ifndef DIRECT_ONLY
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+#endif
 }
 
 // handle window resize

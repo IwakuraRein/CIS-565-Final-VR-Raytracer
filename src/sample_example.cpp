@@ -388,7 +388,7 @@ void SampleExample::renderScene(const VkCommandBuffer& cmdBuf, nvvk::ProfilerVK&
 	auto sec = profiler.timeRecurring("Render", cmdBuf);
 
 	// We are done rendering
-	if (m_rtxState.frame >= m_maxFrames * 100)
+	if (m_rtxState.frame >= m_maxFrames)
 		return;
 
 	// Handling de-scaling by reducing the size to render

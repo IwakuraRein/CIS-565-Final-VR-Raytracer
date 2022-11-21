@@ -24,6 +24,8 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
+#define DIRECT_ONLY
+
 #ifdef __cplusplus
 #include <stdint.h>
 #include "nvmath/nvmath.h"
@@ -124,7 +126,7 @@ eNone = 0,
 eRIS = 1,
 eSpatial = 2,
 eTemporal = 3,
-eSpatioTemporal = 4
+eSpatiotemporal = 4
 END_ENUM();
 
 // Camera of the scene

@@ -162,4 +162,10 @@ vec3 unpackTangent(vec3 n, uint val){
   return normalize(cos(theta) * T + sin(theta) * B);
 }
 
+vec2 toConcentricDisk(vec2 r) {
+    float rx = sqrt(r.x);
+    float theta = r.y * 2.0 * M_PI;
+    return vec2(cos(theta), sin(theta)) * rx;
+}
+
 #endif  // RAYCOMMON_GLSL

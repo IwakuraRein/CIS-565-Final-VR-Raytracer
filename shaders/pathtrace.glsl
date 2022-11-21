@@ -613,6 +613,30 @@ vec3 DirectSample(Ray r, out uvec4 gInfo, inout Reservoir resv) {
 }
 */
 
+const uint NullMatId = 0xffffu;
+
+uvec4 encodeGeometryInfo(vec3 color, vec3 normal, float depth, uint matId) {
+    uvec4 gInfo;
+    gInfo.x = packUnormYCbCr(color);
+    gInfo.y = compress_unit_vec(normal);
+    gInfo.z = floatBitsToUint(depth);
+    gInfo.w = matId;
+    return gInfo;
+}
+
+void decodeGeometryInfo(uvec4 gInfo, out vec3 color, out vec3 normal, out float depth, out uint matId) {
+    color = unpackUnormYCbCr(gInfo.x);
+    normal = decompress_unit_vec(gInfo.y);
+    depth = uintBitsToFloat(gInfo.z);
+    matId = gInfo.w;
+}
+
+void decodeGeometryInfo(uvec4 gInfo, out vec3 normal, out float depth, out uint matId) {
+    normal = decompress_unit_vec(gInfo.y);
+    depth = uintBitsToFloat(gInfo.z);
+    matId = gInfo.w;
+}
+
 vec3 PHat(Reservoir resv, State state, vec3 wo) {
     return resv.lightSample.Li * Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf) *
         abs(dot(state.ffnormal, resv.lightSample.wi));
@@ -622,22 +646,66 @@ float BigW(Reservoir resv, State state, vec3 wo) {
     return resv.weight / (resvToScalar(PHat(resv, state, wo)) * float(resv.num));
 }
 
-Reservoir findTemporalNeighbor() {
-    //uvec4 pack = imageLoad(thisDirectCache, imageCoords);
-    //return decodeReservoir(pack);
-    int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
-    return lastDirectResv[idx];
+bool findTemporalNeighbor(out Reservoir resv) {
+    resv = lastDirectResv[imageCoords.y * rtxState.size.x + imageCoords.x];
+    return true;
 }
 
-void saveReservoir(Reservoir resv) {
-    //imageStore(thisDirectCache, imageCoords, encodeReservoir(tempResv));
+bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out Reservoir resv) {
+    const float Radius = 15.0;
+
     int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
-    thisDirectResv[idx] = resv;
+
+    vec2 p = toConcentricDisk(vec2(rand(prd.seed), rand(prd.seed)));
+    int px = int(float(imageCoords.x + p.x) + 0.5);
+    int py = int(float(imageCoords.y + p.y) + 0.5);
+    int pidx = py * rtxState.size.x + px;
+
+    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
+    vec3 pnorm; float pdepth; uint pmatId;
+    decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
+
+    bool diff = false;
+    if (px < 0 || px >= rtxState.size.x || py < 0 || py >= rtxState.size.y) {
+        return false;
+    }
+    else if (pmatId != matId || pmatId == NullMatId) {
+        return false;
+    }
+    else if (dot(norm, pnorm) < 0.1 || abs(depth - pdepth) > depth * 0.1) {
+        return false;
+    }
+    resv = lastDirectResv[pidx];
+    return true;
 }
 
-vec3 DirectSample(Ray r, out uvec4 gInfo) {
+bool mergeSpatialNeighbors(vec3 norm, float depth, uint matId, out Reservoir resv) {
+    bool valid = false;
+    resvReset(resv);
+    for (int i = 0; i < 5; i++) {
+        Reservoir spatial;
+        if (findSpatialNeighbor(norm, depth, matId, spatial)) {
+            if (!resvInvalid(spatial)) {
+                resvMerge(resv, spatial, rand(prd.seed));
+                valid = true;
+            }
+        }
+    }
+    return valid;
+}
+
+void saveNewReservoir(Reservoir resv) {
+    thisDirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
+}
+
+void cacheTempReservoir(Reservoir resv) {
+    lastDirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
+}
+
+vec3 DirectSample(Ray r) {
+    uvec4 gInfo;
     ClosestHit(r);
-    gInfo.w = floatBitsToUint(prd.hitT);
+    //gInfo.w = floatBitsToUint(prd.hitT);
 
     if (prd.hitT >= INFINITY) {
         // state.position = vec3(INFINITY) + abs(r.origin);
@@ -650,7 +718,7 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
             env = texture(environmentTexture, uv).rgb;
         }
         // Done sampling return
-
+        imageStore(thisGbuffer, imageCoords, uvec4(0, 0, 0, NullMatId));
         return (env * rtxState.hdrMultiplier);
     }
     State state = GetState(r);
@@ -660,10 +728,16 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
     // Color at vertices
     // state.mat.albedo *= sstate.color;
     // Normal, Tangent, TexCoord, Material ID
+    /*
     gInfo.y = compress_unit_vec(state.normal);
     gInfo.z = packUnorm2x16(state.texCoord);
     gInfo.x = packTangent(state.normal, state.tangent);
     gInfo.x = (state.matID << 16) + (gInfo.x << 16 >> 16);
+    */
+
+    gInfo = encodeGeometryInfo(state.mat.albedo, state.normal, prd.hitT, state.matID);
+    imageStore(thisGbuffer, imageCoords, gInfo);
+    barrier();
 
     if (rtxState.debugging_mode > eIndirectStage)
         return DebugInfo(state);
@@ -676,87 +750,93 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
     //vec3 direct= DirectLight(state, -r.direction);
     vec3 direct = vec3(0.0);
 
-  float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
-  if(rand(prd.seed) < lightsourceProb) {
-    if (rtxState.ReSTIRState == eNone) {
-        direct = DirectLight(state, wo) / lightsourceProb;
+#ifndef DIRECT_ONLY
+    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
+    if (rand(prd.seed) < lightsourceProb) {
+#endif
+        if (rtxState.ReSTIRState == eNone) {
+            direct = DirectLight(state, wo);
+        }
+        else {
+            Reservoir resv;
+            resvReset(resv);
+
+            for (int i = 0; i < rtxState.RISRepeat; i++) {
+                LightSample lsample;
+                float p = SampleDirectLightNoVisibility(state.position, lsample);
+
+                vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
+                float weight = resvToScalar(g / p);
+
+                if (IsPdfInvalid(p) || isnan(weight)) {
+                    weight = 0.0;
+                }
+                resvUpdate(resv, lsample, weight, rand(prd.seed));
+            }
+            LightSample lsample = resv.lightSample;
+            Ray shadowRay;
+            shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+            shadowRay.direction = lsample.wi;
+
+            if (Occlusion(shadowRay, state, lsample.dist)) {
+                resv.weight = 0.0;
+            }
+
+            if (rtxState.frame != 0 && (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal)) {
+                Reservoir temporal;
+                if (findTemporalNeighbor(temporal)) {
+                    if (!resvInvalid(temporal)) {
+                        resvPreClampedMerge20(resv, temporal, rand(prd.seed));
+                    }
+                }
+            }
+
+            lsample = resv.lightSample;
+            Reservoir tempResv = resv;
+
+            if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
+                resvCheckValidity(resv);
+                cacheTempReservoir(resv);
+                barrier();
+                Reservoir spatialAggregate;
+                if (mergeSpatialNeighbors(state.normal, prd.hitT, state.matID, spatialAggregate)) {
+                    if (!resvInvalid(spatialAggregate) && !resvInvalid(resv)) {
+                        resvMerge(resv, spatialAggregate, rand(prd.seed));
+                    }
+                }
+            }
+            resvCheckValidity(tempResv);
+            saveNewReservoir(tempResv);
+            lsample = resv.lightSample;
+
+            if (!resvInvalid(resv)) {
+                /*direct = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) *
+                  abs(dot(state.ffnormal, lsample.wi)) * BigW(resv, state, wo);
+                */
+                vec3 LiBsdf = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf);
+                direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num);
+            }
+        }
+#ifndef DIRECT_ONLY
+        direct /= lightsourceProb;
     }
     else {
-        Reservoir resv;
-        resvReset(resv);
-
-        for (int i = 0; i < rtxState.RISRepeat; i++) {
-            LightSample lsample;
-            float p = SampleDirectLightNoVisibility(state.position, lsample);
-
-            vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
-            float weight = resvToScalar(g / p);
-
-            if (IsPdfInvalid(p) || isnan(weight)) {
-                weight = 0.0;
-            }
-            resvUpdate(resv, lsample, weight, rand(prd.seed));
-        }
-        LightSample lsample = resv.lightSample;
-        Ray shadowRay;
-        shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-        shadowRay.direction = lsample.wi;
-
-        if (Occlusion(shadowRay, state, lsample.dist)) {
-            resv.weight = 0.0;
-        }
-
-        if (rtxState.frame != 0 && (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatioTemporal)) {
-            Reservoir temporal = findTemporalNeighbor();
-            if (!resvInvalid(temporal)) {
-                resvPreClampedMerge20(resv, temporal, rand(prd.seed));
-            }
-        }
-
-        lsample = resv.lightSample;
-        Reservoir tempResv = resv;
-
-        /*
-        if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
-          resvCheckValidity(resv);
-          imageStore(lastDirectCache, imageCoords, encodeReservoir(resv));
-        }
-        */
-
-        resvCheckValidity(tempResv);
-        saveReservoir(tempResv);
-        lsample = resv.lightSample;
-
-        if (!resvInvalid(resv)) {
-            /*direct = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) *
-              abs(dot(state.ffnormal, lsample.wi)) * BigW(resv, state, wo);
-            */
-            vec3 LiBsdf = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf);
-            direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num) / lightsourceProb;
-
-            if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
-                direct = vec3(0.0);
-            }
-        }
-    }
-  }
-    else{
         Ray shadowRay;
         BsdfSampleRec bsdfSampleRec;
         bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
 
-        if(bsdfSampleRec.pdf > 0.0) {
+        if (bsdfSampleRec.pdf > 0.0) {
             vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
             shadowRay.direction = bsdfSampleRec.L;
             shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
             ClosestHit(shadowRay);
-            if(prd.hitT >= INFINITY) {
+            if (prd.hitT >= INFINITY) {
                 vec3 env;
-                if(_sunAndSky.in_use == 1)
-                env = sun_and_sky(_sunAndSky, shadowRay.direction);
+                if (_sunAndSky.in_use == 1)
+                    env = sun_and_sky(_sunAndSky, shadowRay.direction);
                 else {
-                vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
-                env = texture(environmentTexture, uv).rgb;
+                    vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
+                    env = texture(environmentTexture, uv).rgb;
                 }
                 // Done sampling return
                 direct = (env * rtxState.hdrMultiplier) * throughput;
@@ -769,8 +849,12 @@ vec3 DirectSample(Ray r, out uvec4 gInfo) {
                 GetMaterialsAndTextures(state2, shadowRay);
 
                 direct = state2.mat.emission * throughput / (1.0 - lightsourceProb);
-            } 
+            }
         }
+    }
+#endif
+    if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
+        direct = vec3(0.0);
     }
     return state.mat.emission + direct;
 }

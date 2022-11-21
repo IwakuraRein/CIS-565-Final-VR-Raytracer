@@ -96,15 +96,10 @@ void main() {
   //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
-  uvec4 gInfo;
-  /*
-  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-  }
-  */
   
   Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
-  vec3 radiance = DirectSample(ray, gInfo);
+  vec3 radiance = DirectSample(ray);
   
   float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
   if(lum > rtxState.fireflyClampThreshold) {
@@ -112,30 +107,12 @@ void main() {
   }
   pixelColor += radiance;
 
-  //pixelColor /= rtxState.spp;
-
-  // Debug - Heatmap
-  // if(rtxState.debugging_mode == eHeatmap) {
-  //   uint64_t end = clockRealtimeEXT();
-  //   float low = rtxState.minHeatmap;
-  //   float high = rtxState.maxHeatmap;
-  //   float val = clamp((float(end - start) - low) / (high - low), 0.0, 1.0);
-  //   pixelColor = temperature(val);
-
-  //   // Wrap & SM visualization
-  //   // pixelColor = temperature(float(gl_SMIDNV) / float(gl_SMCountNV - 1)) * float(gl_WarpIDNV) / float(gl_WarpsPerSMNV - 1);
-  // }
-
-  // Saving pixel color
-
-  //imageStore(thisDirectCache, imageCoords, encodeResvoir(resv));
-  imageStore(thisGbuffer, imageCoords, gInfo);
   if(rtxState.frame > 0) {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
-    //imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1.0));
+    //imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1.0));
   } else {
     // First frame, replace the value in the buffer
     imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));

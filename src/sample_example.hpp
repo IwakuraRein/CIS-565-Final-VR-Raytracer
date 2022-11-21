@@ -187,7 +187,7 @@ public:
 		0,                    // in_use;
 	};
 
-	int         m_maxFrames{ 1000 };
+	int         m_maxFrames{ 1000000 };
 	int         m_totalFrames{ -1 };
 	bool        m_showAxis{ true };
 	bool        m_descaling{ false };
