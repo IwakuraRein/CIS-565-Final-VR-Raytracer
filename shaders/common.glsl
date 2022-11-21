@@ -25,6 +25,7 @@
 #ifndef RAYCOMMON_GLSL
 #define RAYCOMMON_GLSL
 
+const float InvalidPdf = -1.0;
 
 //-----------------------------------------------------------------------
 // Debugging

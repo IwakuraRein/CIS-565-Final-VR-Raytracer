@@ -222,7 +222,9 @@ struct RtxState
 
 	float hdrMultiplier;   // To brightening the scene
 	int debugging_mode;	   // See DebugMode
-	int pbrMode;		   // 0-Disney, 1-Gltf
+
+	int pbrMode;
+
 	float environmentProb; // Used in direct light importance sampling
 
 	ivec2 size;		// rendering size

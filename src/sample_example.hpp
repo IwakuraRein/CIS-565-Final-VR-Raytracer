@@ -159,7 +159,7 @@ public:
 
 		1,       // hdrMultiplier;
 		0,       // debugging_mode;
-		0,       // pbrMode;
+		2,       // pbrMode;
 		0.25f,
 
 		{0, 0},  // size;

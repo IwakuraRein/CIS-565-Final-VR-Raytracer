@@ -1,3 +1,6 @@
+#ifndef RESTIR_GLSL
+#define RESTIR_GLSL
+
 #include "host_device.h"
 
 const int ReservoirSize = 32;
@@ -76,3 +79,5 @@ Reservoir decodeReservoir(uvec4 pack) {
     resv.num = (pack.z & 0xFF) + (pack.w >> 24);
     return resv;
 }
+
+#endif

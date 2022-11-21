@@ -29,13 +29,13 @@
 
 #include "pbr_disney.glsl"
 #include "pbr_gltf.glsl"
+#include "pbr_metallicworkflow.glsl"
 #include "gltf_material.glsl"
 #include "punctual.glsl"
 #include "env_sampling.glsl"
 #include "shade_state.glsl"
 #include "restir.glsl"
 
-const float InvalidPdf = -1.0;
 float dummyPdf;
 
 bool IsPdfInvalid(float p) {
@@ -67,19 +67,29 @@ bool Occlusion(Ray ray, State state, float dist) {
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Eval(in State state, in vec3 V, in vec3 N, in vec3 L, inout float pdf) {
-    if (rtxState.pbrMode == 0)
+    switch (rtxState.pbrMode) {
+    case 0:
         return DisneyEval(state, V, N, L, pdf);
-    else
+    case 1:
         return PbrEval(state, V, N, L, pdf);
+    case 2:
+        return metallicWorkflowEval(state, N, V, L, pdf);
+    }
+    return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Sample(in State state, in vec3 V, in vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
-    if (rtxState.pbrMode == 0)
+    switch (rtxState.pbrMode) {
+    case 0:
         return DisneySample(state, V, N, L, pdf, seed);
-    else
+    case 1:
         return PbrSample(state, V, N, L, pdf, seed);
+    case 2:
+        return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
+    }
+    return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
@@ -846,9 +856,10 @@ vec3 DirectSample(Ray r) {
                 state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
                 GetMaterialsAndTextures(state2, shadowRay);
 
-                direct = state2.mat.emission * throughput / (1.0 - lightsourceProb);
+                direct = state2.mat.emission * throughput;
             }
         }
+        direct /= 1.0 - lightsourceProb;
     }
 #endif
     if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {

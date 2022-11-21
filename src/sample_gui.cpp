@@ -130,7 +130,7 @@ bool SampleGUI::guiRayTracing()
 		"Value of 1, will not de-scale",
 		&_se->m_descalingLevel, nullptr, Normal, 1, 8);
 
-	changed |= GuiH::Selection("Pbr Mode", "PBR material model", &rtxState.pbrMode, nullptr, Normal, { "Disney", "Gltf" });
+	changed |= GuiH::Selection("Pbr Mode", "PBR material model", &rtxState.pbrMode, nullptr, Normal, { "Disney", "Gltf", "Metallic Workflow" });
 
 	changed |= GuiH::Selection("Debug Mode", "Display unique values of material", &rtxState.debugging_mode, nullptr, Normal,
 		{
