@@ -800,11 +800,13 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	vec2 jitter{ (nvmath::nv_random<float>() /** 0.5f*/) / size.width, (nvmath::nv_random<float>() /** 0.5f*/) / size.height };
 	const auto view = CameraManip.getMatrix();
 	auto proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
-	proj.a02 += jitter.x;
-	proj.a12 += jitter.y;
+	//proj.a02 += jitter.x;
+	//proj.a12 += jitter.y;
+	m_camera.lastProjView = m_camera.projView;
 	m_camera.viewInverse = nvmath::invert(view);
 	m_camera.projInverse = nvmath::invert(proj);
-	m_camera.projView = nvmath::invert(proj * view); //?
+	//m_camera.projView = nvmath::invert(proj * view); //?
+	m_camera.projView = proj * view;
 
 	// Focal is the interest point
 	m_camera.focalDist = nvmath::length(center - eye);

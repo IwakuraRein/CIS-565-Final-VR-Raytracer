@@ -101,7 +101,9 @@ eThisGbuffer = 1,
 //eThisDirectCache = 4,
 //eThisIndirectCache = 5,
 eLastDirectResv = 2,
-eThisDirectResv = 3
+eThisDirectResv = 3,
+eTempDirectResv = 4,
+eMotionVector = 5
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -137,6 +139,7 @@ struct SceneCamera
 	mat4 viewInverse;
 	mat4 projInverse;
 	mat4 projView;
+	mat4 lastProjView;
 	float focalDist;
 	float aperture;
 	// Extra

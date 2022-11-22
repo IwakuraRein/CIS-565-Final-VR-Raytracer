@@ -61,6 +61,8 @@ void Renderer::destroy()
 	//m_pAlloc->destroy(m_indirectCache[1]);
 	m_pAlloc->destroy(m_directReservoir[0]);
 	m_pAlloc->destroy(m_directReservoir[1]);
+	m_pAlloc->destroy(m_directResvTemp);
+	m_pAlloc->destroy(m_motionVector);
 
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
@@ -108,15 +110,15 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	computePipelineCreateInfo.stage.pName = "main";
 
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_directPipeline);
-
 	m_debug.setObjectName(m_directPipeline, "Renderer-Direct");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+
 	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
-
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
-
 	m_debug.setObjectName(m_indirectPipeline, "RendererIndirect");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+
+	//computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, 
 
 	timer.print();
 }
@@ -158,18 +160,21 @@ void Renderer::update(const VkExtent2D& size) {
 		//m_pAlloc->destroy(m_indirectCache[1]);
 		m_pAlloc->destroy(m_directReservoir[0]);
 		m_pAlloc->destroy(m_directReservoir[1]);
+		m_pAlloc->destroy(m_motionVector);
+
 		createImage();
 		createBuffer();
 
 		VkShaderStageFlags flag = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 			| VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		std::array<VkWriteDescriptorSet, 4> writes;
+		std::array<VkWriteDescriptorSet, 6> writes;
 		VkDeviceSize resvSize = size.width * size.height * sizeof(Reservoir);
 
 		for (int i = 0; i < 2; i++) {
 			VkDescriptorBufferInfo lastDirectResvBufInfo = { m_directReservoir[i].buffer, 0, resvSize };
 			VkDescriptorBufferInfo thisDirectResvBufInfo = { m_directReservoir[!i].buffer, 0, resvSize };
+			VkDescriptorBufferInfo tempDirectResvBufInfo = { m_directResvTemp.buffer, 0, resvSize };
 
 			writes[0] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastGbuffer, &m_gbuffer[i].descriptor);
 			writes[1] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisGbuffer, &m_gbuffer[!i].descriptor);
@@ -179,6 +184,8 @@ void Renderer::update(const VkExtent2D& size) {
 			//writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisIndirectCache, &m_indirectCache[!i].descriptor);
 			writes[2] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectResv, &lastDirectResvBufInfo);
 			writes[3] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectResv, &thisDirectResvBufInfo);
+			writes[4] = m_bind.makeWrite(m_descSet[i], RayQBindings::eTempDirectResv, &tempDirectResvBufInfo);
+			writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eMotionVector, &m_motionVector.descriptor);
 			vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 		}
 	//}
@@ -189,6 +196,7 @@ void Renderer::createBuffer()
 	VkDeviceSize size = m_size.width * m_size.height * sizeof(Reservoir);
 	m_directReservoir[0] = m_pAlloc->createBuffer(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	m_directReservoir[1] = m_pAlloc->createBuffer(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	m_directResvTemp = m_pAlloc->createBuffer(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 }
 
 void Renderer::createImage()
@@ -209,6 +217,15 @@ void Renderer::createImage()
 		m_gbuffer[1] = m_pAlloc->createTexture(gbimage2, ivInfo2);
 		m_gbuffer[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		m_gbuffer[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+		auto motionVecCreateInfo = nvvk::makeImage2DCreateInfo(m_size, m_motionVectorFormat,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+		nvvk::Image motionVecImg = m_pAlloc->createImage(motionVecCreateInfo);
+		NAME_VK(motionVecImg.image);
+
+		VkImageViewCreateInfo mvivInfo = nvvk::makeImageViewCreateInfo(motionVecImg.image, motionVecCreateInfo);
+		m_motionVector = m_pAlloc->createTexture(motionVecImg, mvivInfo);
+		m_motionVector.descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 		//nvvk::Image cacheimage1 = m_pAlloc->createImage(colorCreateInfo);
 		//NAME_VK(cacheimage1.image);
@@ -244,6 +261,7 @@ void Renderer::createImage()
 		//nvvk::cmdBarrierImageLayout(cmdBuf, m_directCache[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		//nvvk::cmdBarrierImageLayout(cmdBuf, m_indirectCache[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		//nvvk::cmdBarrierImageLayout(cmdBuf, m_indirectCache[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		nvvk::cmdBarrierImageLayout(cmdBuf, m_motionVector.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		genCmdBuf.submitAndWait(cmdBuf);
 	}
@@ -267,18 +285,21 @@ void Renderer::createDescriptorSet()
 	//m_bind.addBinding({ RayQBindings::eThisIndirectCache, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 	m_bind.addBinding({ RayQBindings::eLastDirectResv, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	m_bind.addBinding({ RayQBindings::eThisDirectResv, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	m_bind.addBinding({ RayQBindings::eTempDirectResv, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
+	m_bind.addBinding({ RayQBindings::eMotionVector, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 
 	m_descPool = m_bind.createPool(m_device, m_descSet.size());
 	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
 	CREATE_NAMED_VK(m_descSet[0], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 	CREATE_NAMED_VK(m_descSet[1], nvvk::allocateDescriptorSet(m_device, m_descPool, m_descSetLayout));
 
-	std::array<VkWriteDescriptorSet, 4> writes;
+	std::array<VkWriteDescriptorSet, 6> writes;
 	VkDeviceSize resvSize = m_size.width * m_size.height * sizeof(Reservoir);
 
 	for (int i = 0; i < 2; i++) {
 		VkDescriptorBufferInfo lastDirectResvBufInfo = { m_directReservoir[i].buffer, 0, resvSize };
 		VkDescriptorBufferInfo thisDirectResvBufInfo = { m_directReservoir[!i].buffer, 0, resvSize };
+		VkDescriptorBufferInfo tempDirectResvBufInfo = { m_directResvTemp.buffer, 0, resvSize };
 
 		writes[0] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastGbuffer, &m_gbuffer[i].descriptor);
 		writes[1] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisGbuffer, &m_gbuffer[!i].descriptor);
@@ -288,6 +309,8 @@ void Renderer::createDescriptorSet()
 		//writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisIndirectCache, &m_indirectCache[!i].descriptor);
 		writes[2] = m_bind.makeWrite(m_descSet[i], RayQBindings::eLastDirectResv, &lastDirectResvBufInfo);
 		writes[3] = m_bind.makeWrite(m_descSet[i], RayQBindings::eThisDirectResv, &thisDirectResvBufInfo);
+		writes[4] = m_bind.makeWrite(m_descSet[i], RayQBindings::eTempDirectResv, &tempDirectResvBufInfo);
+		writes[5] = m_bind.makeWrite(m_descSet[i], RayQBindings::eMotionVector, &m_motionVector.descriptor);
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	}
 }

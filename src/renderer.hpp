@@ -75,8 +75,13 @@ private:
   //std::array<nvvk::Texture, 2> m_directCache;
   //std::array<nvvk::Texture, 2> m_indirectCache;
   std::array<nvvk::Buffer, 2> m_directReservoir;
+  nvvk::Buffer m_directResvTemp;
   // Normal, TexCoord, Depth, Material ID
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
+
+  nvvk::Texture m_motionVector;
+  //VkFormat m_motionVectorFormat{ VK_FORMAT_R16G16_SFLOAT };
+  VkFormat m_motionVectorFormat{ VK_FORMAT_R16G16_SINT };
 
   // The luminance can be compressed to 32bit YCbCr
   // The unit vector can also be compressed to 32bit
@@ -88,9 +93,10 @@ private:
   VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
   std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
 
-  VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
-  VkPipeline       m_directPipeline{VK_NULL_HANDLE};
-  VkPipeline       m_indirectPipeline{VK_NULL_HANDLE};
+  VkPipelineLayout m_pipelineLayout{ VK_NULL_HANDLE };
+  VkPipeline       m_directPipeline{ VK_NULL_HANDLE };
+  VkPipeline       m_indirectPipeline{ VK_NULL_HANDLE };
+  VkPipeline       m_gBufferPipeline{ VK_NULL_HANDLE };
 
   VkExtent2D m_size{};
 
