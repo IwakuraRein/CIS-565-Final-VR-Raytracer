@@ -803,6 +803,7 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	//proj.a02 += jitter.x;
 	//proj.a12 += jitter.y;
 	m_camera.lastProjView = m_camera.projView;
+	m_camera.lastView = nvmath::invert(m_camera.viewInverse);
 	m_camera.viewInverse = nvmath::invert(view);
 	m_camera.projInverse = nvmath::invert(proj);
 	//m_camera.projView = nvmath::invert(proj * view); //?

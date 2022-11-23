@@ -56,6 +56,13 @@ void resvPreClampedMerge20(inout Reservoir resv, Reservoir rhs, float r) {
     resvMerge(resv, rhs, r);
 }
 
+void resvClamp(inout Reservoir resv, int clamp) {
+    if (resv.num > clamp) {
+        resv.weight *= float(clamp) / float(resv.num);
+        resv.num = clamp;
+    }
+}
+
 // 32bit Li, 32bit direction, 24bit weight, 16bit num, 24bit dist
 // untested
 uvec4 encodeReservoir(Reservoir resv) {

@@ -139,6 +139,7 @@ struct SceneCamera
 	mat4 viewInverse;
 	mat4 projInverse;
 	mat4 projView;
+	mat4 lastView;
 	mat4 lastProjView;
 	float focalDist;
 	float aperture;
@@ -237,10 +238,11 @@ struct RtxState
 	uint time; // How long has the app been running. miliseconds.
 	int ReSTIRState;
 #ifdef __cplusplus
-	int RISRepeat = 32;
+	int RISRepeat = 16;
 #else
 	int RISRepeat;
 #endif
+	bool accumulate;
 };
 
 // Structure used for retrieving the primitive information in the closest hit

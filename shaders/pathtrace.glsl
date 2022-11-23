@@ -534,7 +534,7 @@ float BigW(Reservoir resv, State state, vec3 wo) {
     return resv.weight / (resvToScalar(PHat(resv, state, wo)) * float(resv.num));
 }
 
-bool findTemporalNeighbor(vec3 norm, float depth, uint matId, ivec2 lastCoord, out Reservoir resv) {
+bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
     int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
     uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
@@ -548,7 +548,7 @@ bool findTemporalNeighbor(vec3 norm, float depth, uint matId, ivec2 lastCoord, o
     else if (pmatId != matId || pmatId == NullMatId) {
         return false;
     }
-    else if (dot(norm, pnorm) < 0.1 || abs(depth - pdepth) > depth * 0.1) {
+    else if (dot(norm, pnorm) < 0.9 || abs(depth - pdepth) > depth * 0.1 /*|| (pdepth < reprojDepth - 1e-6)*/) {
         return false;
     }
     resv = lastDirectResv[pidx];
@@ -559,7 +559,7 @@ bool findTemporalNeighbor(vec3 norm, float depth, uint matId, ivec2 lastCoord, o
 * Assume temporally reused result is temporarily stored in tempDirectResv
 */
 bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out Reservoir resv) {
-    const float Radius = 15.0;
+    const float Radius = 30.0;
 
     vec2 p = toConcentricDisk(vec2(rand(prd.seed), rand(prd.seed)));
     int px = int(float(imageCoords.x + p.x) + 0.5);
@@ -618,6 +618,12 @@ ivec2 createMotionIndex(vec3 pos) {
     return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1));
 }
 
+float toLastLinearDepth(vec3 pos) {
+    vec4 proj = sceneCamera.lastProjView * vec4(pos, 1.0);
+    proj /= proj.w;
+    return -CAMERA_NEAR * CAMERA_FAR / ((CAMERA_FAR - CAMERA_NEAR) * proj.z - CAMERA_FAR);
+}
+
 vec3 DirectSample(Ray r) {
     int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
     uvec4 gInfo;
@@ -668,6 +674,8 @@ vec3 DirectSample(Ray r) {
 
     vec3 wo = -r.direction;
     vec3 direct = vec3(0.0);
+    vec3 albedo = state.mat.albedo;
+    state.mat.albedo = vec3(1.0);
 
 #ifndef DIRECT_ONLY
     float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
@@ -702,10 +710,13 @@ vec3 DirectSample(Ray r) {
             }
 
             if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
+                //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
+                float reprojDepth = toLastLinearDepth(state.position);
                 Reservoir temporal;
-                if (findTemporalNeighbor(state.normal, prd.hitT, state.matID, motionIdx + 1, temporal)) {
+                if (findTemporalNeighbor(state.normal, prd.hitT, reprojDepth, state.matID, motionIdx + 1, temporal)) {
                     if (!resvInvalid(temporal)) {
-                        resvPreClampedMerge20(resv, temporal, rand(prd.seed));
+                        //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
+                        resvMerge(resv, temporal, rand(prd.seed));
                     }
                 }
             }
@@ -713,6 +724,9 @@ vec3 DirectSample(Ray r) {
             Reservoir tempResv = resv;
 
             if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
+                Reservoir spatial;
+                resvReset(spatial);
+
                 barrier();
                 resvCheckValidity(resv);
                 cacheTempReservoir(resv);
@@ -720,12 +734,28 @@ vec3 DirectSample(Ray r) {
 
                 Reservoir spatialAggregate;
                 if (mergeSpatialNeighbors(state.normal, prd.hitT, state.matID, spatialAggregate)) {
-                    if (!resvInvalid(spatialAggregate) && !resvInvalid(resv)) {
-                        resvMerge(resv, spatialAggregate, rand(prd.seed));
+                    if (!resvInvalid(spatialAggregate)) {
+                        resvMerge(spatial, spatialAggregate, rand(prd.seed));
                     }
+                }
+                barrier();
+                resvCheckValidity(resv);
+                cacheTempReservoir(resv);
+                barrier();
+
+                if (mergeSpatialNeighbors(state.normal, prd.hitT, state.matID, spatialAggregate)) {
+                    if (!resvInvalid(spatialAggregate)) {
+                        resvMerge(spatial, spatialAggregate, rand(prd.seed));
+                    }
+                }
+
+                if (!resvInvalid(spatial)) {
+                    //resvClamp(spatial, 128);
+                    resvMerge(resv, spatial, rand(prd.seed));
                 }
             }
             resvCheckValidity(tempResv);
+            resvClamp(tempResv, 1280);
             saveNewReservoir(tempResv);
             lsample = resv.lightSample;
 
@@ -775,7 +805,7 @@ vec3 DirectSample(Ray r) {
         direct = vec3(0.0);
     }
     //direct = vec3(vec2(motionIdx) / vec2(rtxState.size), 0);
-    return state.mat.emission + direct;
+    return state.mat.emission + direct * albedo;
 }
 
 //-----------------------------------------------------------------------

@@ -148,6 +148,7 @@ bool SampleGUI::guiRayTracing()
 			"Tangent",
 			// "HeatMap",
 		});
+	changed |= GuiH::Checkbox("Accumulate", "", &rtxState.accumulate);
 
 	// if (rtxState.debugging_mode == eHeatmap)
 	// {
