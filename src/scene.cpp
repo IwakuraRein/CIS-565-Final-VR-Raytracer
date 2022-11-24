@@ -774,10 +774,9 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 {
 	const float aspectRatio = size.width / (float)size.height;
-	nvmath::vec3f eye, center, up;
-	CameraManip.getLookat(eye, center, up);
+	static nvmath::vec3f eye{ 0.f,0.f,0.f }, center, up;
 
-	vec2 jitter{ (nvmath::nv_random<float>() /** 0.5f*/) / size.width, (nvmath::nv_random<float>() /** 0.5f*/) / size.height };
+	vec2 jitter{ (nvmath::nv_random<float>() * 0.5f) / size.width, (nvmath::nv_random<float>() * 0.5f) / size.height };
 	const auto view = CameraManip.getMatrix();
 	auto proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
 	//proj.a02 += jitter.x;
@@ -789,8 +788,11 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	//m_camera.projView = nvmath::invert(proj * view); //?
 	m_camera.projView = proj * view;
 
+	m_camera.lastPosition = eye;
+	CameraManip.getLookat(eye, center, up);
+
 	// Focal is the interest point
-	m_camera.focalDist = nvmath::length(center - eye);
+	//m_camera.focalDist = nvmath::length(center - eye);
 
 	// UBO on the device
 	VkBuffer deviceUBO = m_buffer[eCameraMat].buffer;

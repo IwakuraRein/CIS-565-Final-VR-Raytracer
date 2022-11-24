@@ -248,7 +248,8 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
             LightSample cache = thisDirectResv[coord.y * rtxState.size.x + coord.x].lightSample;
 
             cache.Li *= Eval(state, -r.direction, state.ffnormal, cache.wi, dummyPdf);
-            radiance += cache.Li * throughput;
+            if (dummyPdf > 0)
+                radiance += cache.Li * throughput;
         }
     }
 
@@ -414,26 +415,19 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
 const uint NullMatId = 0xffffu;
 
-uvec4 encodeGeometryInfo(vec3 color, vec3 normal, float depth, uint matId) {
+uvec4 encodeGeometryInfo(State state, float depth) {
     uvec4 gInfo;
-    gInfo.x = packUnormYCbCr(color);
-    gInfo.y = compress_unit_vec(normal);
-    gInfo.z = floatBitsToUint(depth);
-    gInfo.w = matId;
+    gInfo.x = floatBitsToUint(depth);
+    gInfo.y = compress_unit_vec(state.normal);
+    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, state.mat.ior, state.mat.transmission));
+    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0));
     return gInfo;
 }
 
-void decodeGeometryInfo(uvec4 gInfo, out vec3 color, out vec3 normal, out float depth, out uint matId) {
-    color = unpackUnormYCbCr(gInfo.x);
+void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
+    uvec2 gInfo = imageLoad(lastGbuffer, imageCoords).xy;
     normal = decompress_unit_vec(gInfo.y);
-    depth = uintBitsToFloat(gInfo.z);
-    matId = gInfo.w;
-}
-
-void decodeGeometryInfo(uvec4 gInfo, out vec3 normal, out float depth, out uint matId) {
-    normal = decompress_unit_vec(gInfo.y);
-    depth = uintBitsToFloat(gInfo.z);
-    matId = gInfo.w;
+    depth = uintBitsToFloat(gInfo.x);
 }
 
 vec3 PHat(Reservoir resv, State state, vec3 wo) {
@@ -448,18 +442,14 @@ float BigW(Reservoir resv, State state, vec3 wo) {
 bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
     int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
-    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
-    vec3 pnorm; float pdepth; uint pmatId;
-    decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
+    vec3 pnorm; float pdepth;
+    loadLastGeometryInfo(imageCoords, pnorm, pdepth);
 
     bool diff = false;
     if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x || lastCoord.x < 0 || lastCoord.y >= rtxState.size.y) {
         return false;
     }
-    else if (pmatId != matId || pmatId == NullMatId) {
-        return false;
-    }
-    else if (dot(norm, pnorm) < 0.9 || abs(depth - pdepth) > depth * 0.1 /*|| (pdepth < reprojDepth - 1e-6)*/) {
+    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.01) {
         return false;
     }
     resv = lastDirectResv[pidx];
@@ -477,15 +467,11 @@ bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out Reservoir resv)
     int py = int(float(imageCoords.y + p.y) + 0.5);
     int pidx = py * rtxState.size.x + px;
 
-    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
-    vec3 pnorm; float pdepth; uint pmatId;
-    decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
+    vec3 pnorm; float pdepth;
+    loadLastGeometryInfo(imageCoords, pnorm, pdepth);
 
     bool diff = false;
     if (px < 0 || px >= rtxState.size.x || py < 0 || py >= rtxState.size.y) {
-        return false;
-    }
-    else if (pmatId != matId || pmatId == NullMatId) {
         return false;
     }
     else if (dot(norm, pnorm) < 0.1 || abs(depth - pdepth) > depth * 0.1) {
@@ -526,13 +512,7 @@ vec2 createMotionVector(vec3 pos) {
 
 ivec2 createMotionIndex(vec3 pos) {
     //return min(ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)), rtxState.size - 1);
-    return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1));
-}
-
-float toLastLinearDepth(vec3 pos) {
-    vec4 proj = sceneCamera.lastProjView * vec4(pos, 1.0);
-    proj /= proj.w;
-    return -CAMERA_NEAR * CAMERA_FAR / ((CAMERA_FAR - CAMERA_NEAR) * proj.z - CAMERA_FAR);
+    return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)) + 1;
 }
 
 vec3 DirectSample(Ray r) {
@@ -551,7 +531,7 @@ vec3 DirectSample(Ray r) {
             env = texture(environmentTexture, uv).rgb;
         }
         // Done sampling return
-        imageStore(thisGbuffer, imageCoords, uvec4(0, 0, floatBitsToUint(INFINITY), NullMatId));
+        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
         imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
         return (env * rtxState.hdrMultiplier);
     }
@@ -562,7 +542,7 @@ vec3 DirectSample(Ray r) {
     ivec2 motionIdx = createMotionIndex(state.position);
     imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
 
-    gInfo = encodeGeometryInfo(state.mat.albedo, state.normal, prd.hitT, state.matID);
+    gInfo = encodeGeometryInfo(state, prd.hitT);
     imageStore(thisGbuffer, imageCoords, gInfo);
     barrier();
 
@@ -613,9 +593,9 @@ vec3 DirectSample(Ray r) {
 
             if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
                 //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
-                float reprojDepth = toLastLinearDepth(state.position);
+                float reprojDepth = length(sceneCamera.lastPosition - state.position);
                 Reservoir temporal;
-                if (findTemporalNeighbor(state.normal, prd.hitT, reprojDepth, state.matID, motionIdx + 1, temporal)) {
+                if (findTemporalNeighbor(state.normal, prd.hitT, reprojDepth, state.matID, motionIdx, temporal)) {
                     if (!resvInvalid(temporal)) {
                         //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
                         resvMerge(resv, temporal, rand(prd.seed));
@@ -727,14 +707,14 @@ Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
     vec4 direction = sceneCamera.viewInverse * vec4(normalize(target.xyz), 0);
 
     // Depth-of-Field
-    vec3 focalPoint = sceneCamera.focalDist * direction.xyz;
-    float cam_r1 = rand(prd.seed) * M_TWO_PI;
+    // vec3 focalPoint = sceneCamera.focalDist * direction.xyz;
+    // float cam_r1 = rand(prd.seed) * M_TWO_PI;
     //float cam_r2 = rand(prd.seed) * sceneCamera.aperture;
-    float cam_r2 = 0.0;
-    vec4 cam_right = sceneCamera.viewInverse * vec4(1, 0, 0, 0);
-    vec4 cam_up = sceneCamera.viewInverse * vec4(0, 1, 0, 0);
-    vec3 randomAperturePos = (cos(cam_r1) * cam_right.xyz + sin(cam_r1) * cam_up.xyz) * sqrt(cam_r2);
-    vec3 finalRayDir = normalize(focalPoint - randomAperturePos);
+    // float cam_r2 = 0.0;
+    // vec4 cam_right = sceneCamera.viewInverse * vec4(1, 0, 0, 0);
+    // vec4 cam_up = sceneCamera.viewInverse * vec4(0, 1, 0, 0);
+    // vec3 randomAperturePos = (cos(cam_r1) * cam_right.xyz + sin(cam_r1) * cam_up.xyz) * sqrt(cam_r2);
+    // vec3 finalRayDir = normalize(focalPoint - randomAperturePos);
 
-    return Ray(origin.xyz, finalRayDir);
+    return Ray(origin.xyz, /*finalRayDir*/ direction.xyz);
 }

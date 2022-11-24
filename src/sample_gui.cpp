@@ -108,7 +108,7 @@ bool SampleGUI::guiCamera()
 	bool changed{ false };
 	changed |= ImGuiH::CameraWidget();
 	auto& cam = _se->m_scene.getCamera();
-	changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
+	//changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
 
 	return changed;
 }

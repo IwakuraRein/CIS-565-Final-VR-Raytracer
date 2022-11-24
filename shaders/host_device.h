@@ -138,8 +138,9 @@ struct SceneCamera
 	mat4 projView;
 	mat4 lastView;
 	mat4 lastProjView;
-	float focalDist;
-	float aperture;
+	vec3 lastPosition;
+	//float focalDist;
+	//float aperture;
 	// Extra
 	int nbLights;
 };
