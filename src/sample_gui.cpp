@@ -140,13 +140,13 @@ bool SampleGUI::guiRayTracing()
 			"Depth",
 			"Metallic",
 			"Emissive",
-			"Alpha",
+			//"Alpha",
 			"Roughness",
 			"TexCoord",
-			"Tangent",
+			//"Tangent",
 			// "HeatMap",
 		});
-	changed |= GuiH::Checkbox("Accumulate", "", &rtxState.accumulate);
+	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
 
 	// if (rtxState.debugging_mode == eHeatmap)
 	// {

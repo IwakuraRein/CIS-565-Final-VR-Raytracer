@@ -107,7 +107,7 @@ void main() {
     // Do accumulation over time
     vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    if (rtxState.accumulate) {
+    if (rtxState.accumulate != 0) {
       imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
     }
     else {

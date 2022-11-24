@@ -228,10 +228,6 @@ vec3 DirectLight(State state, vec3 wo) { // importance sample on light sources
         max(dot(state.ffnormal, lightSample.wi), 0.0) / pdf;
 }
 
-vec3 DirectLuminance(in Ray r, in State state, out vec3 luminance, out vec3 dir) { // importance sample on light sources
-    return DirectLight(state, -r.direction);
-}
-
 
 bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput) {
     // Emissive material
@@ -412,8 +408,6 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
     return radiance;
 }
-
-const uint NullMatId = 0xffffu;
 
 uvec4 encodeGeometryInfo(State state, float depth) {
     uvec4 gInfo;

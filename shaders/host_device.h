@@ -24,7 +24,7 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-#define DIRECT_ONLY
+//#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -198,7 +198,7 @@ struct RtxState
 
 	int ReSTIRState;
 	int RISRepeat;
-	bool accumulate;
+	int accumulate;
 	int pad;
 
 	ivec2 size;		// rendering size
