@@ -79,7 +79,7 @@ bool HitTest(in rayQueryEXT rayQuery, in Ray r)
     vec2       texcoord0    = uv0 * barycentrics.x + uv1 * barycentrics.y + uv2 * barycentrics.z;
 
     // Uv Transform
-    texcoord0 = (vec4(texcoord0.xy, 1, 1) * mat.uvTransform).xy;
+    texcoord0 = texcoord0.xy;
 
     baseColorAlpha *= texture(texturesMap[nonuniformEXT(mat.pbrBaseColorTexture)], texcoord0).a;
   }

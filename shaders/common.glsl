@@ -140,8 +140,10 @@ vec3 unpackUnormYCbCr(in uint c) {
 }
 
 float getDepth(float z) {
-  float z_n = 2.0 * z - 1.0;
-  return 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z_n * (CAMERA_FAR - CAMERA_NEAR));
+  // return 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z_n * (CAMERA_FAR - CAMERA_NEAR));
+  float A = CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  float B = CAMERA_NEAR * CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  return (z - B) / A;
 }
 float getZ(float depth) { // untested
   return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);

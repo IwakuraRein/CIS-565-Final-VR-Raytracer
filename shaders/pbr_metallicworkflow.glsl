@@ -140,7 +140,7 @@ vec3 metallicWorkflowEval(State state, vec3 n, vec3 wo, vec3 wi, out float pdf) 
     return mix(baseColor * PiInv * (1.0 - metallic), vec3(g * d / (4.0 * cosI * cosO)), f);
 }
 
-float metallicWorkflowSample(State state, vec3 n, vec3 wo, vec3 r, out vec3 bsdf, out vec3 dir) {
+float Sample(State state, vec3 n, vec3 wo, vec3 r, out vec3 bsdf, out vec3 dir) {
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
     //float alpha = roughness * roughness;
@@ -165,7 +165,7 @@ float metallicWorkflowSample(State state, vec3 n, vec3 wo, vec3 r, out vec3 bsdf
 
 vec3 metallicWorkflowSample(State state, vec3 n, vec3 wo, vec3 r, out vec3 dir, out float pdf) {
     vec3 bsdf;
-    pdf = metallicWorkflowSample(state, n, wo, r, bsdf, dir);
+    pdf = Sample(state, n, wo, r, bsdf, dir);
     return bsdf;
 }
 

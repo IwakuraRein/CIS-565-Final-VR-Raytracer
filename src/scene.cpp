@@ -421,41 +421,21 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 	shadeMaterials.reserve(gltf.m_materials.size());
 	for (auto& m : gltf.m_materials)
 	{
-		GltfShadeMaterial smat{};
+		GltfShadeMaterial smat;
 		smat.pbrBaseColorFactor = m.baseColorFactor;
 		smat.pbrBaseColorTexture = m.baseColorTexture;
 		smat.pbrMetallicFactor = m.metallicFactor;
 		smat.pbrRoughnessFactor = m.roughnessFactor;
 		smat.pbrMetallicRoughnessTexture = m.metallicRoughnessTexture;
-		smat.khrDiffuseFactor = m.specularGlossiness.diffuseFactor;
-		smat.khrSpecularFactor = m.specularGlossiness.specularFactor;
-		smat.khrDiffuseTexture = m.specularGlossiness.diffuseTexture;
-		smat.khrGlossinessFactor = m.specularGlossiness.glossinessFactor;
-		smat.khrSpecularGlossinessTexture = m.specularGlossiness.specularGlossinessTexture;
-		smat.shadingModel = m.shadingModel;
 		smat.emissiveTexture = m.emissiveTexture;
 		smat.emissiveFactor = m.emissiveFactor;
-		smat.alphaMode = m.alphaMode;
-		smat.alphaCutoff = m.alphaCutoff;
-		smat.doubleSided = m.doubleSided;
 		smat.normalTexture = m.normalTexture;
 		smat.normalTextureScale = m.normalTextureScale;
-		smat.uvTransform = m.textureTransform.uvTransform;
-		smat.unlit = m.unlit.active;
 		smat.transmissionFactor = m.transmission.factor;
 		smat.transmissionTexture = m.transmission.texture;
-		smat.anisotropy = m.anisotropy.factor;
-		smat.anisotropyDirection = m.anisotropy.direction;
 		smat.ior = m.ior.ior;
-		smat.attenuationColor = m.volume.attenuationColor;
-		smat.thicknessFactor = m.volume.thicknessFactor;
-		smat.thicknessTexture = m.volume.thicknessTexture;
-		smat.attenuationDistance = m.volume.attenuationDistance;
-		smat.clearcoatFactor = m.clearcoat.factor;
-		smat.clearcoatRoughness = m.clearcoat.roughnessFactor;
-		smat.clearcoatTexture = m.clearcoat.texture;
-		smat.clearcoatRoughnessTexture = m.clearcoat.roughnessTexture;
-		smat.sheen = packUnorm4x8(vec4(m.sheen.colorFactor, m.sheen.roughnessFactor));
+		smat.alphaMode = m.alphaMode;
+		smat.alphaCutoff = m.alphaCutoff;
 
 		shadeMaterials.emplace_back(smat);
 	}

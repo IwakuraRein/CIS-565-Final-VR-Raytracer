@@ -91,18 +91,13 @@ bool getStateFromCache(Ray ray, out State state, out float depth) {
     return false;
   state.position = ray.origin + ray.direction * depth;
   state.normal = decompress_unit_vec(gInfo.y);
-  //state.tangent = unpackTangent(state.normal, gInfo.x);
-  state.bitangent = cross(state.normal, state.tangent);
   CreateCoordinateSystem(state.normal, state.tangent, state.bitangent);
   state.texCoord = unpackUnorm2x16(gInfo.z);
   state.matID = gInfo.w;
-  state.isEmitter = false;
-  state.specularBounce = false;
-  state.isSubsurface = false;
   state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
 
   // Filling material structures
-  GetMaterialsAndTextures(state, ray);
+  GetMaterialsWithoutNormal(state, ray);
 
   return true;
 }

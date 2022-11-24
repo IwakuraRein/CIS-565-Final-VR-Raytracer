@@ -27,8 +27,6 @@
 #define RR 1        // Using russian roulette
 #define RR_DEPTH 0  // Minimum depth
 
-#include "pbr_disney.glsl"
-#include "pbr_gltf.glsl"
 #include "pbr_metallicworkflow.glsl"
 #include "gltf_material.glsl"
 #include "punctual.glsl"
@@ -51,9 +49,6 @@ State GetState(Ray incomingRay) {
     state.bitangent = sstate.tangent_v[0];
     state.texCoord = sstate.text_coords[0];
     state.matID = sstate.matIndex;
-    state.isEmitter = false;
-    state.specularBounce = false;
-    state.isSubsurface = false;
     state.ffnormal = dot(state.normal, incomingRay.direction) <= 0.0 ? state.normal : -state.normal;
     return state;
 }
@@ -67,29 +62,29 @@ bool Occlusion(Ray ray, State state, float dist) {
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Eval(in State state, in vec3 V, in vec3 N, in vec3 L, inout float pdf) {
-    switch (rtxState.pbrMode) {
-    case 0:
-        return DisneyEval(state, V, N, L, pdf);
-    case 1:
-        return PbrEval(state, V, N, L, pdf);
-    case 2:
+    // switch (rtxState.pbrMode) {
+    // case 0:
+    //     return DisneyEval(state, V, N, L, pdf);
+    // case 1:
+    //     return PbrEval(state, V, N, L, pdf);
+    // case 2:
         return metallicWorkflowEval(state, N, V, L, pdf);
-    }
-    return vec3(0.0);
+    // }
+    // return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Sample(in State state, in vec3 V, in vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
-    switch (rtxState.pbrMode) {
-    case 0:
-        return DisneySample(state, V, N, L, pdf, seed);
-    case 1:
-        return PbrSample(state, V, N, L, pdf, seed);
-    case 2:
+    // switch (rtxState.pbrMode) {
+    // case 0:
+    //     return DisneySample(state, V, N, L, pdf, seed);
+    // case 1:
+    //     return PbrSample(state, V, N, L, pdf, seed);
+    // case 2:
         return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
-    }
-    return vec3(0.0);
+    // }
+    // return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
@@ -106,14 +101,10 @@ vec3 DebugInfo(in State state) {
         return state.mat.albedo;
     case eEmissive:
         return state.mat.emission;
-    case eAlpha:
-        return vec3(state.mat.alpha);
     case eRoughness:
         return vec3(state.mat.roughness);
     case eTexcoord:
         return vec3(state.texCoord, 0);
-    case eTangent:
-        return vec3(state.tangent.xyz + vec3(1)) * .5;
     };
     return vec3(1000, 0, 0);
 }
@@ -242,13 +233,7 @@ vec3 DirectLuminance(in Ray r, in State state, out vec3 luminance, out vec3 dir)
 }
 
 
-bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
+bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput) {
     // Emissive material
     radiance += state.mat.emission * throughput;
     // add screenspace indirect
@@ -267,15 +252,6 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
         }
     }
 
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
-        return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
     // add direct light
     float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
     if (rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
@@ -287,10 +263,34 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
     bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
+    if (bsdfSampleRec.pdf > 0.0) {
+        throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
     }
+    else {
+        return false;
+    }
+
+    // Next ray
+    r.direction = bsdfSampleRec.L;
+    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+
+    return !state.isEmitter;
+}
+bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput) {
+    // KHR_materials_unlit
+    if (state.isEmitter) {
+        return false;
+    }
+    // add direct light
+    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
+    if (rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
+        radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
+    }
+
+    BsdfSampleRec bsdfSampleRec;
+    // Sampling for the next ray
+    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+    bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
     if (bsdfSampleRec.pdf > 0.0) {
         throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
@@ -305,75 +305,15 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
 
     return true;
 }
-bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
+bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput) {
+    if (state.isEmitter) {
         return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
-    // add direct light
-    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
-    if (rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-        radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
     }
 
     BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
     bsdfSampleRec.L = normalize(bsdfSampleRec.L);
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
-    }
-
-    if (bsdfSampleRec.pdf > 0.0) {
-        throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
-    }
-    else {
-        return false;
-    }
-
-    // Next ray
-    r.direction = bsdfSampleRec.L;
-    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-
-    return true;
-}
-bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
-        return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
-    BsdfSampleRec bsdfSampleRec;
-    // Sampling for the next ray
-    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
-    bsdfSampleRec.L = normalize(bsdfSampleRec.L);
-
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
-    }
 
     if (bsdfSampleRec.pdf > 0.0) {
         throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
@@ -393,11 +333,10 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     prd.hitT = hitT;
     vec3 radiance = /*state.mat.emission*/ vec3(0.0);
     vec3 throughput = vec3(1.0);
-    vec3 absorption = vec3(0.0);
 
     { // first intersection
       // we don't want to reintroduce the luminance that direct stage has already done
-        if (!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption))
+        if (!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput))
             return radiance;
 #ifdef RR
         // For Russian-Roulette (minimizing live state)
@@ -416,28 +355,13 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
             return radiance;
         }
 
-        // Get Position, Normal, Tangents, Texture Coordinates, Color
-        ShadeState sstate = GetShadeState(prd);
-        state.position = sstate.position;
-        state.normal = sstate.normal;
-        state.tangent = sstate.tangent_u[0];
-        state.bitangent = sstate.tangent_v[0];
-        state.texCoord = sstate.text_coords[0];
-        state.matID = sstate.matIndex;
-        state.position = sstate.position;
-        state.isEmitter = false;
-        state.specularBounce = false;
-        state.isSubsurface = false;
-        state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+        // Get Position, Normal,Texture Coordinates
+        state = GetState(r);
 
         // Filling material structures
-        GetMaterialsAndTextures(state, r);
-        // we don't use vertex color cause there isn't enough room for it in the Gbuffer
-        // state.mat.albedo *= sstate.color;
+        GetMaterials(state, r);
 
-        // Save as above. we don't want to reintroduce the first direct lighting
-        // but second direct lighting is allowed
-        if (!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
+        if (!UpdateSampleWithoutEmission(r, state, radiance, throughput))
             return radiance;
 
 #ifdef RR
@@ -466,26 +390,13 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
                 return radiance + (env * rtxState.hdrMultiplier * throughput);
             }
 
-            // Get Position, Normal, Tangents, Texture Coordinates, Color
-            ShadeState sstate = GetShadeState(prd);
-            state.position = sstate.position;
-            state.normal = sstate.normal;
-            state.tangent = sstate.tangent_u[0];
-            state.bitangent = sstate.tangent_v[0];
-            state.texCoord = sstate.text_coords[0];
-            state.matID = sstate.matIndex;
-            state.position = sstate.position;
-            state.isEmitter = false;
-            state.specularBounce = false;
-            state.isSubsurface = false;
-            state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+            // Get Position, Normal, Texture Coordinates
+            state = GetState(r);
 
             // Filling material structures
-            GetMaterialsAndTextures(state, r);
-            // Color at vertices
-            // state.mat.albedo *= sstate.color;
+            GetMaterials(state, r);
 
-            if (!UpdateSample(r, state, hitT, radiance, throughput, absorption))
+            if (!UpdateSample(r, state, hitT, radiance, throughput))
                 return radiance;
 
 #ifdef RR
@@ -646,17 +557,8 @@ vec3 DirectSample(Ray r) {
     }
     State state = GetState(r);
     // Filling material structures
-    GetMaterialsAndTextures(state, r);
+    GetMaterials(state, r);
 
-    // Color at vertices
-    // state.mat.albedo *= sstate.color;
-    // Normal, Tangent, TexCoord, Material ID
-    /*
-    gInfo.y = compress_unit_vec(state.normal);
-    gInfo.z = packUnorm2x16(state.texCoord);
-    gInfo.x = packTangent(state.normal, state.tangent);
-    gInfo.x = (state.matID << 16) + (gInfo.x << 16 >> 16);
-    */
     ivec2 motionIdx = createMotionIndex(state.position);
     imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
 
@@ -668,8 +570,8 @@ vec3 DirectSample(Ray r) {
         return DebugInfo(state);
     }
 
-    if (state.mat.unlit) {
-        return state.mat.emission + state.mat.albedo;
+    if (state.isEmitter) {
+        return state.mat.emission;
     }
 
     vec3 wo = -r.direction;
@@ -793,7 +695,7 @@ vec3 DirectSample(Ray r) {
                 ShadeState sstate = GetShadeState(prd);
                 state2.matID = sstate.matIndex;
                 state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
-                GetMaterialsAndTextures(state2, shadowRay);
+                GetMaterials(state2, shadowRay);
 
                 direct = state2.mat.emission * throughput;
             }
