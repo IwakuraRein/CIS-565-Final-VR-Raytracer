@@ -238,9 +238,11 @@ struct RtxState
 	uint time; // How long has the app been running. miliseconds.
 	int ReSTIRState;
 #ifdef __cplusplus
-	int RISRepeat = 16;
+	int RISSampleNum = 16;
+	int reservoirClamp = 80;
 #else
-	int RISRepeat;
+	int RISSampleNum;
+	int reservoirClamp;
 #endif
 	bool accumulate;
 };

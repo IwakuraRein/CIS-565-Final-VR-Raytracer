@@ -537,7 +537,7 @@ float BigW(Reservoir resv, State state, vec3 wo) {
 bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
     int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
-    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
+    uvec4 gInfo = imageLoad(lastGbuffer, lastCoord);
     vec3 pnorm; float pdepth; uint pmatId;
     decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
 
@@ -688,7 +688,7 @@ vec3 DirectSample(Ray r) {
             Reservoir resv;
             resvReset(resv);
 
-            for (int i = 0; i < rtxState.RISRepeat; i++) {
+            for (int i = 0; i < rtxState.RISSampleNum; i++) {
                 LightSample lsample;
                 float p = SampleDirectLightNoVisibility(state.position, lsample);
 
@@ -755,7 +755,7 @@ vec3 DirectSample(Ray r) {
                 }
             }
             resvCheckValidity(tempResv);
-            resvClamp(tempResv, 1280);
+            resvClamp(tempResv, rtxState.RISSampleNum * rtxState.reservoirClamp);
             saveNewReservoir(tempResv);
             lsample = resv.lightSample;
 
