@@ -576,7 +576,7 @@ vec3 DirectSample(Ray r) {
             Reservoir resv;
             resvReset(resv);
 
-            for (int i = 0; i < rtxState.RISRepeat; i++) {
+            for (int i = 0; i < rtxState.RISSampleNum; i++) {
                 LightSample lsample;
                 float p = SampleDirectLightNoVisibility(state.position, lsample);
 
@@ -643,7 +643,7 @@ vec3 DirectSample(Ray r) {
                 }
             }
             resvCheckValidity(tempResv);
-            resvClamp(tempResv, 1280);
+            resvClamp(tempResv, rtxState.RISSampleNum * rtxState.reservoirClamp);
             saveNewReservoir(tempResv);
             lsample = resv.lightSample;
 

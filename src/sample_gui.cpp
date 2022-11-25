@@ -167,7 +167,8 @@ bool SampleGUI::guiRayTracing()
 			"Spatiotemporal"
 		});
 
-	changed |= GuiH::Slider("RIS Repeat", "", &rtxState.RISRepeat, nullptr, Normal, 1, 64);
+	changed |= GuiH::Slider("RIS Repeat", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
+	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1600);
 
 	GuiH::Group<bool>("Direct Light", false, [&] {
 		changed |= GuiH::Slider("Environment Weight",

@@ -164,8 +164,8 @@ public:
 
 		0,
 		16,
-		0,
-		0,      // pad
+		80,      // clamp
+		0,       // accumulate
 
 		{0, 0},  // size;
 	};

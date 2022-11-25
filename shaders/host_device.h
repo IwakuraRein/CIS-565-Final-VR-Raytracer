@@ -198,9 +198,9 @@ struct RtxState
 	uint time; // How long has the app been running. miliseconds.
 
 	int ReSTIRState;
-	int RISRepeat;
+	int RISSampleNum;
+	int reservoirClamp;
 	int accumulate;
-	int pad;
 
 	ivec2 size;		// rendering size
 };
