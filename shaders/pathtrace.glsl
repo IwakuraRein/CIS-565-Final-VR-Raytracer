@@ -565,7 +565,7 @@ vec3 DirectSample(Ray r) {
     vec3 albedo = state.mat.albedo;
     state.mat.albedo = vec3(1.0);
 #ifndef DIRECT_ONLY
-    float directProb = min(state.mat.roughness * 2.0, 1.0);
+    float directProb = min((state.mat.roughness - 0.001) * 2.0, 1.0);
     bool directSampling = (rand(prd.seed) < directProb);
     // directSampling = false;
 #else 
@@ -623,7 +623,7 @@ vec3 DirectSample(Ray r) {
             float p;
             vec3 bsdf = Sample(state, -r.direction, state.ffnormal, resv.lightSample.wi, p, prd.seed);
             wo = -r.direction;
-            p /= 1.0 - directProb;
+            p *= 1.0 - directProb;
             if (!IsPdfInvalid(p)) {
                 shadowRay.direction = resv.lightSample.wi;
                 shadowRay.origin = OffsetRay(state.position, dot(resv.lightSample.wi, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
@@ -658,7 +658,7 @@ vec3 DirectSample(Ray r) {
         else {
             for (int i = 0; i < rtxState.RISSampleNum; i++) {
                 LightSample lsample;
-                float p = SampleDirectLightNoVisibility(state.position, lsample) / directProb;
+                float p = SampleDirectLightNoVisibility(state.position, lsample) * directProb;
                 float weight = 0.0;
 
                 if (!IsPdfInvalid(p)) {
@@ -683,12 +683,14 @@ vec3 DirectSample(Ray r) {
             //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
             float reprojDepth = length(sceneCamera.lastPosition - state.position);
             Reservoir temporal;
+            
+            if ((gl_GlobalInvocationID.x == motionIdx.x && gl_GlobalInvocationID.y == motionIdx.y) || state.mat.roughness > 0.2) {
             if (findTemporalNeighbor(state.normal, depth, reprojDepth, state.matID, motionIdx, temporal)) {
                 if (!resvInvalid(temporal)) {
                     //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
                     resvMerge(resv, temporal, rand(prd.seed));
                 }
-            }
+            }}
         }
 
         // store the reservoir before spatial reuse
