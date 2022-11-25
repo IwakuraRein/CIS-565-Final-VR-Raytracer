@@ -160,6 +160,7 @@ struct VertexAttributes
 #define ALPHA_OPAQUE 0
 #define ALPHA_MASK 1
 #define ALPHA_BLEND 2
+#define MAX_IOR_MINUS_ONE 3.f
 struct GltfShadeMaterial
 {
 	vec4 pbrBaseColorFactor;

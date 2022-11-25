@@ -421,6 +421,9 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 	shadeMaterials.reserve(gltf.m_materials.size());
 	for (auto& m : gltf.m_materials)
 	{
+		if (m.shadingModel == MATERIAL_SPECULARGLOSSINESS) {
+			LOGI("Error: Sepcular-Glossiness workflow unsupported.\n");
+		}
 		GltfShadeMaterial smat;
 		smat.pbrBaseColorFactor = m.baseColorFactor;
 		smat.pbrBaseColorTexture = m.baseColorTexture;
@@ -433,7 +436,7 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 		smat.normalTextureScale = m.normalTextureScale;
 		smat.transmissionFactor = m.transmission.factor;
 		smat.transmissionTexture = m.transmission.texture;
-		smat.ior = m.ior.ior;
+		smat.ior = nvmath::nv_clamp(m.ior.ior, 1.f, MAX_IOR_MINUS_ONE + 1.f);
 		smat.alphaMode = m.alphaMode;
 		smat.alphaCutoff = m.alphaCutoff;
 

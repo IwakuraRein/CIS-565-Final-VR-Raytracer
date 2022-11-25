@@ -97,7 +97,7 @@ bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   vec4 matInfo = unpackUnorm4x8(gInfo.z);
   state.mat.metallic = matInfo.x;
   state.mat.roughness = matInfo.y;
-  state.mat.ior = matInfo.z;
+  state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
   state.mat.transmission = matInfo.w;
   return true;
 }

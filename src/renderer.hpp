@@ -76,7 +76,7 @@ private:
   //std::array<nvvk::Texture, 2> m_indirectCache;
   std::array<nvvk::Buffer, 2> m_directReservoir;
   nvvk::Buffer m_directResvTemp;
-  // Depth 32bit, Normal 32bit, Metallic 8bit, Roughness 8bit, IOR 8bit, Transmission 8bit, Albedo 24bit, Undefined 8bit
+  // Depth 32bit, Normal 32bit, Metallic 8bit, Roughness 8bit, IOR 8bit, Transmission 8bit, Albedo 24bit, Hashed Material ID 8bit
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
 
   nvvk::Texture m_motionVector;

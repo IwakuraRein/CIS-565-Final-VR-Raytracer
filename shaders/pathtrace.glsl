@@ -413,8 +413,9 @@ uvec4 encodeGeometryInfo(State state, float depth) {
     uvec4 gInfo;
     gInfo.x = floatBitsToUint(depth);
     gInfo.y = compress_unit_vec(state.normal);
-    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, state.mat.ior, state.mat.transmission));
-    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0));
+    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
+    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0)) & 0xFFFFFF; //agbr
+    gInfo.w += hash8bit(state.matID);
     return gInfo;
 }
 
@@ -422,6 +423,12 @@ void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
     uvec2 gInfo = imageLoad(lastGbuffer, imageCoords).xy;
     normal = decompress_unit_vec(gInfo.y);
     depth = uintBitsToFloat(gInfo.x);
+}
+void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, out uint matHash) {
+    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
+    normal = decompress_unit_vec(gInfo.y);
+    depth = uintBitsToFloat(gInfo.x);
+    matHash = gInfo.w & 0xFF000000;
 }
 
 vec3 PHat(Reservoir resv, State state, vec3 wo) {
@@ -436,16 +443,21 @@ float BigW(Reservoir resv, State state, vec3 wo) {
 bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
     int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
-    vec3 pnorm; float pdepth;
-    loadLastGeometryInfo(imageCoords, pnorm, pdepth);
+    vec3 pnorm; float pdepth; uint matHash;
+    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
 
     bool diff = false;
     if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x || lastCoord.x < 0 || lastCoord.y >= rtxState.size.y) {
         return false;
     }
-    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.01) {
+    else if (hash8bit(matId) != matHash)
+        return false;
+    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
         return false;
     }
+    // else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth) {
+    //     return false;
+    // }
     resv = lastDirectResv[pidx];
     return true;
 }
