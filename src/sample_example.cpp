@@ -101,6 +101,7 @@ void SampleExample::loadEnvironmentHdr(const std::string& hdrFilename)
 	timer.print();
 
 	m_rtxState.fireflyClampThreshold = m_skydome.getIntegral() * 4.f;  // magic
+	m_rtxState.envMapLuminIntegInv = 1.f / m_skydome.getIntegral();
 }
 
 

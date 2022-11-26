@@ -74,7 +74,6 @@ vec2 GetSphericalUv(vec3 v)
   return uv;
 }
 
-
 //-----------------------------------------------------------------------
 // Return the tangent and binormal from the incoming normal
 //-----------------------------------------------------------------------
@@ -173,6 +172,11 @@ vec2 toConcentricDisk(vec2 r) {
     float rx = sqrt(r.x);
     float theta = r.y * 2.0 * M_PI;
     return vec2(cos(theta), sin(theta)) * rx;
+}
+
+float powerHeuristic(float f, float g) {
+    float f2 = f * f;
+    return f2 / (f2 + g * g);
 }
 
 #endif  // RAYCOMMON_GLSL

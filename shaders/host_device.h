@@ -24,7 +24,7 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-//#define DIRECT_ONLY
+#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -203,6 +203,8 @@ struct RtxState
 	int accumulate;
 
 	ivec2 size;		// rendering size
+	float envMapLuminIntegInv;
+	int MIS;
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -232,8 +234,20 @@ struct LightSample{
 	float pHat;
 };
 
+struct GISample {
+	vec3 L;
+	vec3 xv, nv;
+	vec3 xs, ns;
+};
+
 struct Reservoir {
 	LightSample lightSample;
+	uint num;
+	float weight;
+};
+
+struct GIReservoir {
+	GISample lightSample;
 	uint num;
 	float weight;
 };

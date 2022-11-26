@@ -168,6 +168,8 @@ public:
 		0,       // accumulate
 
 		{0, 0},  // size;
+		0,       // environment map luminance integral inverse
+		true,    // MIS
 	};
 
 	SunAndSky m_sunAndSky{

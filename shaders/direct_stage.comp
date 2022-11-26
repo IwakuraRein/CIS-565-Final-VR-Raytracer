@@ -95,7 +95,8 @@ void main() {
   
   Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
-  vec3 radiance = DirectSample(ray);
+  //vec3 radiance = DirectSample(ray);
+  vec3 radiance = PathTraceReSTIRGI(ray);
   
   float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
   if(lum > rtxState.fireflyClampThreshold) {

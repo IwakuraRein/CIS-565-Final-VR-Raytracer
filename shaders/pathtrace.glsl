@@ -59,36 +59,22 @@ bool Occlusion(Ray ray, State state, float dist) {
         abs(ray.origin.z - state.position.z));
 }
 
-//-----------------------------------------------------------------------
-//-----------------------------------------------------------------------
-vec3 Eval(in State state, in vec3 V, in vec3 N, in vec3 L, inout float pdf) {
-    // switch (rtxState.pbrMode) {
-    // case 0:
-    //     return DisneyEval(state, V, N, L, pdf);
-    // case 1:
-    //     return PbrEval(state, V, N, L, pdf);
-    // case 2:
-        return metallicWorkflowEval(state, N, V, L, pdf);
-    // }
-    // return vec3(0.0);
+vec3 BSDF(State state, vec3 V, vec3 N, vec3 L) {
+    return metallicWorkflowBSDF(state, N, V, L);
 }
 
-//-----------------------------------------------------------------------
-//-----------------------------------------------------------------------
-vec3 Sample(in State state, in vec3 V, in vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
-    // switch (rtxState.pbrMode) {
-    // case 0:
-    //     return DisneySample(state, V, N, L, pdf, seed);
-    // case 1:
-    //     return PbrSample(state, V, N, L, pdf, seed);
-    // case 2:
-        return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
-    // }
-    // return vec3(0.0);
+float Pdf(State state, vec3 V, vec3 N, vec3 L) {
+    return metallicWorkflowPdf(state, N, V, L);
 }
 
-//-----------------------------------------------------------------------
-//-----------------------------------------------------------------------
+vec3 Eval(State state, vec3 V, vec3 N, vec3 L, inout float pdf) {
+     return metallicWorkflowEval(state, N, V, L, pdf);
+}
+
+vec3 Sample(State state, vec3 V, vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
+     return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
+}
+
 vec3 DebugInfo(in State state) {
     switch (rtxState.debugging_mode) {
     case eMetallic:
@@ -109,8 +95,40 @@ vec3 DebugInfo(in State state) {
     return vec3(1000, 0, 0);
 }
 
-//-----------------------------------------------------------------------
-//-----------------------------------------------------------------------
+vec3 EnvRadiance(vec3 dir) {
+    if (_sunAndSky.in_use == 1)
+        return sun_and_sky(_sunAndSky, dir) * rtxState.hdrMultiplier;
+    else {
+        vec2 uv = GetSphericalUv(dir);
+        return texture(environmentTexture, uv).rgb * rtxState.hdrMultiplier;
+    }
+}
+
+float EnvPdf(vec3 dir) {
+    float pdf;
+    if (_sunAndSky.in_use == 1) {
+        pdf = 0.5;
+    }
+    else {
+        vec2 uv = GetSphericalUv(dir);
+        pdf = luminance(texture(environmentTexture, uv).rgb) * rtxState.envMapLuminIntegInv;
+    }
+    return pdf * rtxState.environmentProb;
+}
+
+vec3 EnvEval(vec3 dir, out float pdf) {
+    if (_sunAndSky.in_use == 1) {
+        pdf = 0.5 * rtxState.environmentProb;
+        return sun_and_sky(_sunAndSky, dir) * rtxState.hdrMultiplier;
+    }
+    else {
+        vec2 uv = GetSphericalUv(dir);
+        vec3 radiance = texture(environmentTexture, uv).rgb;
+        pdf = luminance(radiance) * rtxState.envMapLuminIntegInv * rtxState.environmentProb;
+        return radiance;
+    }
+}
+
 vec2 SampleTriangleUniform(vec3 v0, vec3 v1, vec3 v2) {
     float ru = rand(prd.seed);
     float rv = rand(prd.seed);
@@ -208,6 +226,25 @@ float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
             return (1.0 - rtxState.environmentProb) * SamplePuncLight(pos, lightSample) * (1.0 - lightBufInfo.trigSampProb);
         }
     }
+}
+
+float SampleDirectLight(State state, out vec3 radiance, out vec3 dir) {
+    LightSample lsample;
+    float pdf = SampleDirectLightNoVisibility(state.position, lsample);
+    if (IsPdfInvalid(pdf)) {
+        return InvalidPdf;
+    }
+
+    Ray shadowRay;
+    shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+    shadowRay.direction = lsample.wi;
+
+    if (Occlusion(shadowRay, state, lsample.dist)) {
+        return InvalidPdf;
+    }
+    radiance = lsample.Li;
+    dir = lsample.wi;
+    return pdf;
 }
 
 vec3 DirectLight(State state, vec3 wo) { // importance sample on light sources
@@ -741,13 +778,108 @@ vec3 DirectSample(Ray r) {
         }
     }
 
-
     if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
         direct = vec3(0.0);
     }
     // direct = vec3(vec2(motionIdx) / vec2(rtxState.size), 0);
     return state.mat.emission + direct * albedo;
     // return direct;
+}
+
+float MIS(float f, float g) {
+    return (rtxState.MIS > 0) ? powerHeuristic(f, g) : 0.5;
+}
+
+vec3 PathTraceReSTIRGI(Ray ray) {
+    int index = imageCoords.y * rtxState.size.x + imageCoords.x;
+    ClosestHit(ray);
+
+    if (prd.hitT >= INFINITY) {
+        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
+        imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
+        return EnvRadiance(ray.direction);
+    }
+    // Get intersection point info: geometry and material
+    State state = GetState(ray);
+    GetMaterials(state, ray);
+
+    // Write motion vector and G-buffer
+    ivec2 motionIdx = createMotionIndex(state.position);
+    uvec4 gInfo = encodeGeometryInfo(state, prd.hitT);
+    imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
+    imageStore(thisGbuffer, imageCoords, gInfo);
+    barrier();
+
+    if (rtxState.debugging_mode > eIndirectStage) {
+        return DebugInfo(state);
+    }
+
+    if (state.isEmitter) {
+        return state.mat.emission;
+    }
+
+    vec3 radiance = vec3(0.0);
+    vec3 throughput = vec3(1.0);
+    float primSamplePdf;
+    bool primSampleDelta;
+    vec3 primWo = -ray.direction;
+    //Material primMaterial = state.mat;
+
+    for (int depth = 1; depth <= rtxState.maxDepth; depth++) {
+        vec3 wo = -ray.direction;
+        {
+            vec3 Li;
+            vec3 wi;
+            float lightPdf = SampleDirectLight(state, Li, wi);
+
+            if (!IsPdfInvalid(lightPdf)) {
+                float BSDFPdf = Pdf(state, wo, state.ffnormal, wi);
+                float weight = MIS(lightPdf, BSDFPdf);
+                radiance += Li * BSDF(state, wo, state.ffnormal, wi) * absDot(state.ffnormal, wi) *
+                    throughput / lightPdf * weight;
+            }
+        }
+
+        vec3 sampleWi;
+        float samplePdf;
+        vec3 sampleBSDF = Sample(state, wo, state.ffnormal, sampleWi, samplePdf, prd.seed);
+
+        if (IsPdfInvalid(samplePdf) || samplePdf < 1e-8) {
+            break;
+        }
+
+        throughput *= sampleBSDF / samplePdf * absDot(state.ffnormal, sampleWi);
+
+        ray.origin = OffsetRay(state.position, state.ffnormal);
+        ray.direction = sampleWi;
+
+        vec3 curPos = state.position;
+        ClosestHit(ray);
+
+        if (prd.hitT >= INFINITY) {
+            float lightPdf;
+            vec3 Li = EnvEval(sampleWi, lightPdf);
+            float weight = MIS(samplePdf, lightPdf);
+            radiance += Li * throughput * weight;
+            break;
+        }
+
+        state = GetState(ray);
+        GetMaterials(state, ray);
+
+#ifdef RR
+        float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
+        if (rand(prd.seed) >= rrPcont) {
+            break;
+        }
+        throughput /= rrPcont;
+#endif
+    }
+
+    if (isnan(radiance.x) || isnan(radiance.y) || isnan(radiance.z)) {
+        radiance = vec3(0.0);
+    }
+    return radiance;
 }
 
 //-----------------------------------------------------------------------

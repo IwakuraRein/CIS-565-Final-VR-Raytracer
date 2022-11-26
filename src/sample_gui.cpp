@@ -147,6 +147,7 @@ bool SampleGUI::guiRayTracing()
 			// "HeatMap",
 		});
 	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
+	changed |= GuiH::Checkbox("MIS", "", (bool*)&rtxState.MIS);
 
 	// if (rtxState.debugging_mode == eHeatmap)
 	// {
@@ -167,7 +168,7 @@ bool SampleGUI::guiRayTracing()
 			"Spatiotemporal"
 		});
 
-	changed |= GuiH::Slider("RIS Repeat", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
+	changed |= GuiH::Slider("RIS Sample Num", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
 	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1600);
 
 	GuiH::Group<bool>("Direct Light", false, [&] {
