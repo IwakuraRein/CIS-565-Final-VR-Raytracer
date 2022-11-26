@@ -421,41 +421,24 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 	shadeMaterials.reserve(gltf.m_materials.size());
 	for (auto& m : gltf.m_materials)
 	{
-		GltfShadeMaterial smat{};
+		if (m.shadingModel == MATERIAL_SPECULARGLOSSINESS) {
+			LOGI("Error: Sepcular-Glossiness workflow unsupported.\n");
+		}
+		GltfShadeMaterial smat;
 		smat.pbrBaseColorFactor = m.baseColorFactor;
 		smat.pbrBaseColorTexture = m.baseColorTexture;
 		smat.pbrMetallicFactor = m.metallicFactor;
 		smat.pbrRoughnessFactor = m.roughnessFactor;
 		smat.pbrMetallicRoughnessTexture = m.metallicRoughnessTexture;
-		smat.khrDiffuseFactor = m.specularGlossiness.diffuseFactor;
-		smat.khrSpecularFactor = m.specularGlossiness.specularFactor;
-		smat.khrDiffuseTexture = m.specularGlossiness.diffuseTexture;
-		smat.khrGlossinessFactor = m.specularGlossiness.glossinessFactor;
-		smat.khrSpecularGlossinessTexture = m.specularGlossiness.specularGlossinessTexture;
-		smat.shadingModel = m.shadingModel;
 		smat.emissiveTexture = m.emissiveTexture;
 		smat.emissiveFactor = m.emissiveFactor;
-		smat.alphaMode = m.alphaMode;
-		smat.alphaCutoff = m.alphaCutoff;
-		smat.doubleSided = m.doubleSided;
 		smat.normalTexture = m.normalTexture;
 		smat.normalTextureScale = m.normalTextureScale;
-		smat.uvTransform = m.textureTransform.uvTransform;
-		smat.unlit = m.unlit.active;
 		smat.transmissionFactor = m.transmission.factor;
 		smat.transmissionTexture = m.transmission.texture;
-		smat.anisotropy = m.anisotropy.factor;
-		smat.anisotropyDirection = m.anisotropy.direction;
-		smat.ior = m.ior.ior;
-		smat.attenuationColor = m.volume.attenuationColor;
-		smat.thicknessFactor = m.volume.thicknessFactor;
-		smat.thicknessTexture = m.volume.thicknessTexture;
-		smat.attenuationDistance = m.volume.attenuationDistance;
-		smat.clearcoatFactor = m.clearcoat.factor;
-		smat.clearcoatRoughness = m.clearcoat.roughnessFactor;
-		smat.clearcoatTexture = m.clearcoat.texture;
-		smat.clearcoatRoughnessTexture = m.clearcoat.roughnessTexture;
-		smat.sheen = packUnorm4x8(vec4(m.sheen.colorFactor, m.sheen.roughnessFactor));
+		smat.ior = nvmath::nv_clamp(m.ior.ior, 1.f, MAX_IOR_MINUS_ONE + 1.f);
+		smat.alphaMode = m.alphaMode;
+		smat.alphaCutoff = m.alphaCutoff;
 
 		shadeMaterials.emplace_back(smat);
 	}
@@ -794,10 +777,9 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 {
 	const float aspectRatio = size.width / (float)size.height;
-	nvmath::vec3f eye, center, up;
-	CameraManip.getLookat(eye, center, up);
+	static nvmath::vec3f eye{ 0.f,0.f,0.f }, center, up;
 
-	vec2 jitter{ (nvmath::nv_random<float>() /** 0.5f*/) / size.width, (nvmath::nv_random<float>() /** 0.5f*/) / size.height };
+	vec2 jitter{ (nvmath::nv_random<float>() * 0.5f) / size.width, (nvmath::nv_random<float>() * 0.5f) / size.height };
 	const auto view = CameraManip.getMatrix();
 	auto proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
 	//proj.a02 += jitter.x;
@@ -809,8 +791,11 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	//m_camera.projView = nvmath::invert(proj * view); //?
 	m_camera.projView = proj * view;
 
+	m_camera.lastPosition = eye;
+	CameraManip.getLookat(eye, center, up);
+
 	// Focal is the interest point
-	m_camera.focalDist = nvmath::length(center - eye);
+	//m_camera.focalDist = nvmath::length(center - eye);
 
 	// UBO on the device
 	VkBuffer deviceUBO = m_buffer[eCameraMat].buffer;

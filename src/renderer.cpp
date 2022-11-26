@@ -160,6 +160,7 @@ void Renderer::update(const VkExtent2D& size) {
 		//m_pAlloc->destroy(m_indirectCache[1]);
 		m_pAlloc->destroy(m_directReservoir[0]);
 		m_pAlloc->destroy(m_directReservoir[1]);
+		m_pAlloc->destroy(m_directResvTemp);
 		m_pAlloc->destroy(m_motionVector);
 
 		createImage();

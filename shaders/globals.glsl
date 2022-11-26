@@ -75,31 +75,11 @@ struct ShadowHitPayload
 struct Material
 {
   vec3  albedo;
-  float specular;
   vec3  emission;
-  float anisotropy;
   float metallic;
-  float roughness;
-  float subsurface;
-  float specularTint;
-  float sheen;
-  vec3  sheenTint;
-  float clearcoat;
-  float clearcoatRoughness;
-  float transmission;
   float ior;
-  vec3  attenuationColor;
-  float attenuationDistance;
-
-  //vec3  texIDs;
-  // Roughness calculated from anisotropic
-  float ax;
-  float ay;
-  // ----
-  vec3  f0;
-  float alpha;
-  bool  unlit;
-  bool  thinwalled;
+  float roughness;
+  float transmission;
 };
 
 // From shading state, this is the structure pass to the eval functions
@@ -110,14 +90,12 @@ struct State
 
   vec3 position;
   vec3 normal;
-  vec3 ffnormal;
   vec3 tangent;
   vec3 bitangent;
+  vec3 ffnormal;
   vec2 texCoord;
 
   bool isEmitter;
-  bool specularBounce;
-  bool isSubsurface;
 
   uint     matID;
   Material mat;

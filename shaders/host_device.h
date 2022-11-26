@@ -24,7 +24,7 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-#define DIRECT_ONLY
+//#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -115,11 +115,8 @@ eNormal = 4,   //
 eDepth = 5,    //
 eMetallic = 6,   //
 eEmissive = 7,   //
-eAlpha = 8,   //
-eRoughness = 9,   //
-eTexcoord = 10,   //
-eTangent = 11   //
-// eHeatmap = 11   //
+eRoughness = 8,   //
+eTexcoord = 9   //
 END_ENUM();
 // clang-format on
 
@@ -141,8 +138,9 @@ struct SceneCamera
 	mat4 projView;
 	mat4 lastView;
 	mat4 lastProjView;
-	float focalDist;
-	float aperture;
+	vec3 lastPosition;
+	//float focalDist;
+	//float aperture;
 	// Extra
 	int nbLights;
 };
@@ -162,58 +160,28 @@ struct VertexAttributes
 #define ALPHA_OPAQUE 0
 #define ALPHA_MASK 1
 #define ALPHA_BLEND 2
+#define MAX_IOR_MINUS_ONE 3.f
 struct GltfShadeMaterial
 {
-	// 0
 	vec4 pbrBaseColorFactor;
-	// 4
+
 	int pbrBaseColorTexture;
 	float pbrMetallicFactor;
 	float pbrRoughnessFactor;
 	int pbrMetallicRoughnessTexture;
-	// 8
-	vec4 khrDiffuseFactor; // KHR_materials_pbrSpecularGlossiness
-	vec3 khrSpecularFactor;
-	int khrDiffuseTexture;
-	// 16
-	int shadingModel; // 0: metallic-roughness, 1: specular-glossiness
-	float khrGlossinessFactor;
-	int khrSpecularGlossinessTexture;
+
 	int emissiveTexture;
-	// 20
 	vec3 emissiveFactor;
-	int alphaMode;
-	// 24
-	float alphaCutoff;
-	int doubleSided;
+	
 	int normalTexture;
 	float normalTextureScale;
-	// 28
-	mat4 uvTransform;
-	// 32
-	int unlit;
-
 	float transmissionFactor;
 	int transmissionTexture;
 
 	float ior;
-	// 36
-	vec3 anisotropyDirection;
-	float anisotropy;
-	// 40
-	vec3 attenuationColor;
-	float thicknessFactor; // 44
-	int thicknessTexture;
-	float attenuationDistance;
-	// --
-	float clearcoatFactor;
-	float clearcoatRoughness;
-	// 48
-	int clearcoatTexture;
-	int clearcoatRoughnessTexture;
-	uint sheen;
+	int alphaMode;
+	float alphaCutoff;
 	int pad;
-	// 52
 };
 
 // Use with PushConstant
@@ -226,25 +194,15 @@ struct RtxState
 
 	float hdrMultiplier;   // To brightening the scene
 	int debugging_mode;	   // See DebugMode
-
-	int pbrMode;
-
 	float environmentProb; // Used in direct light importance sampling
-
-	ivec2 size;		// rendering size
-	int minHeatmap; // Debug mode - heat map
-	int maxHeatmap;
-
 	uint time; // How long has the app been running. miliseconds.
+
 	int ReSTIRState;
-#ifdef __cplusplus
-	int RISSampleNum = 16;
-	int reservoirClamp = 80;
-#else
 	int RISSampleNum;
 	int reservoirClamp;
-#endif
-	bool accumulate;
+	int accumulate;
+
+	ivec2 size;		// rendering size
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -271,6 +229,7 @@ struct LightSample{
 	vec3 Li;
 	vec3 wi;
 	float dist;
+	float pHat;
 };
 
 struct Reservoir {

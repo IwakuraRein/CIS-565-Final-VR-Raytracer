@@ -115,7 +115,7 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
 
 // compact hdr color to 32bit
 // TODO: change tone mapping
-uint packUnormYCbCr(in vec3 c) {
+uint packYCbCr(in vec3 c) {
   // c = pow(c, vec3(0.5, 0.5, 0.5));
   c = c / (1.0 + c);
   float y = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
@@ -126,7 +126,7 @@ uint packUnormYCbCr(in vec3 c) {
   outVal += uint(cr * 255.0);
   return outVal;
 }
-vec3 unpackUnormYCbCr(in uint c) {
+vec3 unpackYCbCr(in uint c) {
   float y = (c >> 16) / 65535.0;
   float cb = ((c << 16) >> 24) / 255.0 - 0.5;
   float cr = ((c << 24) >> 24) / 255.0 - 0.5;
@@ -139,9 +139,15 @@ vec3 unpackUnormYCbCr(in uint c) {
   return rgb / (1.0 - rgb);
 }
 
-float getDepth(float z) {
-  float z_n = 2.0 * z - 1.0;
-  return 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z_n * (CAMERA_FAR - CAMERA_NEAR));
+uint hash8bit(uint a) {
+  return (a ^ (a >> 8)) << 24;
+}
+
+float getDepth(float z) { // untested
+  // return 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z_n * (CAMERA_FAR - CAMERA_NEAR));
+  float A = CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  float B = CAMERA_NEAR * CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  return (z - B) / A;
 }
 float getZ(float depth) { // untested
   return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);

@@ -83,27 +83,22 @@ ivec2 SampleSizzled() {
 //
 //
 
-// TODO: fix tangent
-bool getStateFromCache(Ray ray, out State state, out float depth) {
+bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
-  depth = uintBitsToFloat(gInfo.z);
+  depth = uintBitsToFloat(gInfo.x);
   if(depth >= INFINITY)
     return false;
   state.position = ray.origin + ray.direction * depth;
   state.normal = decompress_unit_vec(gInfo.y);
-  //state.tangent = unpackTangent(state.normal, gInfo.x);
-  state.bitangent = cross(state.normal, state.tangent);
-  CreateCoordinateSystem(state.normal, state.tangent, state.bitangent);
-  state.texCoord = unpackUnorm2x16(gInfo.z);
-  state.matID = gInfo.w;
-  state.isEmitter = false;
-  state.specularBounce = false;
-  state.isSubsurface = false;
   state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
 
   // Filling material structures
-  GetMaterialsAndTextures(state, ray);
-
+  state.mat.albedo = unpackUnorm4x8(gInfo.w).xyz;
+  vec4 matInfo = unpackUnorm4x8(gInfo.z);
+  state.mat.metallic = matInfo.x;
+  state.mat.roughness = matInfo.y;
+  state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
+  state.mat.transmission = matInfo.w;
   return true;
 }
 
@@ -129,7 +124,7 @@ void main() {
     State state;
     Ray ray = raySpawn(imageCoords, ivec2(imageRes));
 
-    if(!getStateFromCache(ray, state, depth))
+    if(!getStateFromGbuffer(ray, state, depth))
       break;
 
     vec3 radiance = IndirectSample(ray, state, depth);
@@ -141,18 +136,6 @@ void main() {
     pixelColor += radiance;
   }
   pixelColor /= rtxState.spp;
-
-  // Debug - Heatmap
-  // if(rtxState.debugging_mode == eHeatmap) {
-  //   uint64_t end = clockRealtimeEXT();
-  //   float low = rtxState.minHeatmap;
-  //   float high = rtxState.maxHeatmap;
-  //   float val = clamp((float(end - start) - low) / (high - low), 0.0, 1.0);
-  //   pixelColor = temperature(val);
-
-  //   // Wrap & SM visualization
-  //   // pixelColor = temperature(float(gl_SMIDNV) / float(gl_SMCountNV - 1)) * float(gl_WarpIDNV) / float(gl_WarpsPerSMNV - 1);
-  // }
 
   // Saving pixel color
   if(rtxState.frame > 0) {

@@ -27,8 +27,6 @@
 #define RR 1        // Using russian roulette
 #define RR_DEPTH 0  // Minimum depth
 
-#include "pbr_disney.glsl"
-#include "pbr_gltf.glsl"
 #include "pbr_metallicworkflow.glsl"
 #include "gltf_material.glsl"
 #include "punctual.glsl"
@@ -51,9 +49,6 @@ State GetState(Ray incomingRay) {
     state.bitangent = sstate.tangent_v[0];
     state.texCoord = sstate.text_coords[0];
     state.matID = sstate.matIndex;
-    state.isEmitter = false;
-    state.specularBounce = false;
-    state.isSubsurface = false;
     state.ffnormal = dot(state.normal, incomingRay.direction) <= 0.0 ? state.normal : -state.normal;
     return state;
 }
@@ -67,29 +62,29 @@ bool Occlusion(Ray ray, State state, float dist) {
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Eval(in State state, in vec3 V, in vec3 N, in vec3 L, inout float pdf) {
-    switch (rtxState.pbrMode) {
-    case 0:
-        return DisneyEval(state, V, N, L, pdf);
-    case 1:
-        return PbrEval(state, V, N, L, pdf);
-    case 2:
+    // switch (rtxState.pbrMode) {
+    // case 0:
+    //     return DisneyEval(state, V, N, L, pdf);
+    // case 1:
+    //     return PbrEval(state, V, N, L, pdf);
+    // case 2:
         return metallicWorkflowEval(state, N, V, L, pdf);
-    }
-    return vec3(0.0);
+    // }
+    // return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 vec3 Sample(in State state, in vec3 V, in vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
-    switch (rtxState.pbrMode) {
-    case 0:
-        return DisneySample(state, V, N, L, pdf, seed);
-    case 1:
-        return PbrSample(state, V, N, L, pdf, seed);
-    case 2:
+    // switch (rtxState.pbrMode) {
+    // case 0:
+    //     return DisneySample(state, V, N, L, pdf, seed);
+    // case 1:
+    //     return PbrSample(state, V, N, L, pdf, seed);
+    // case 2:
         return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
-    }
-    return vec3(0.0);
+    // }
+    // return vec3(0.0);
 }
 
 //-----------------------------------------------------------------------
@@ -106,14 +101,10 @@ vec3 DebugInfo(in State state) {
         return state.mat.albedo;
     case eEmissive:
         return state.mat.emission;
-    case eAlpha:
-        return vec3(state.mat.alpha);
     case eRoughness:
         return vec3(state.mat.roughness);
     case eTexcoord:
         return vec3(state.texCoord, 0);
-    case eTangent:
-        return vec3(state.tangent.xyz + vec3(1)) * .5;
     };
     return vec3(1000, 0, 0);
 }
@@ -234,21 +225,11 @@ vec3 DirectLight(State state, vec3 wo) { // importance sample on light sources
         return vec3(0.0);
     }
     return lightSample.Li * Eval(state, wo, state.ffnormal, lightSample.wi, dummyPdf) *
-        max(dot(state.ffnormal, lightSample.wi), 0.0) / pdf;
-}
-
-vec3 DirectLuminance(in Ray r, in State state, out vec3 luminance, out vec3 dir) { // importance sample on light sources
-    return DirectLight(state, -r.direction);
+        abs(dot(state.ffnormal, lightSample.wi)) / pdf;
 }
 
 
-bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
+bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput) {
     // Emissive material
     radiance += state.mat.emission * throughput;
     // add screenspace indirect
@@ -258,28 +239,20 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
     //check if this sample appears in direct stage's result
     if (ndc.x >= 0.0 && ndc.x <= 1.0 && ndc.y >= 0.0 && ndc.y <= 1.0) {
         // TODO: adjust offset according to normal
-        if (getDepth(ndc.z) <= (screenDepth + 1e-3)) {
+        if (length(state.position - sceneCamera.lastPosition) <= screenDepth * 1.01) {
             ivec2 coord = ivec2(round(ndc.x * rtxState.size.x), round(ndc.y * rtxState.size.y));
             LightSample cache = thisDirectResv[coord.y * rtxState.size.x + coord.x].lightSample;
 
             cache.Li *= Eval(state, -r.direction, state.ffnormal, cache.wi, dummyPdf);
-            radiance += cache.Li * throughput;
+            if (dummyPdf > 0)
+                radiance += cache.Li * throughput;
         }
     }
 
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
-        return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
     // add direct light
-    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
-    if (rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-        radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
+    float directProb = min(state.mat.roughness * 2.0, 1.0);
+    if (rand(prd.seed) < directProb) { // importance sampling on light sources
+        radiance += DirectLight(state, -r.direction) * throughput / directProb;
     }
 
     BsdfSampleRec bsdfSampleRec;
@@ -287,10 +260,34 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
     bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
+    if (bsdfSampleRec.pdf > 0.0) {
+        throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
     }
+    else {
+        return false;
+    }
+
+    // Next ray
+    r.direction = bsdfSampleRec.L;
+    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+
+    return !state.isEmitter;
+}
+bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput) {
+    // KHR_materials_unlit
+    if (state.isEmitter) {
+        return false;
+    }
+    // add direct light
+    float directProb = min(state.mat.roughness * 2.0, 1.0);
+    if (rand(prd.seed) < directProb) { // importance sampling on light sources
+        radiance += DirectLight(state, -r.direction) * throughput / directProb;
+    }
+
+    BsdfSampleRec bsdfSampleRec;
+    // Sampling for the next ray
+    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
+    bsdfSampleRec.L = normalize(bsdfSampleRec.L);
 
     if (bsdfSampleRec.pdf > 0.0) {
         throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
@@ -305,75 +302,15 @@ bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 
 
     return true;
 }
-bool UpdateSampleWithoutEmission(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
+bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput) {
+    if (state.isEmitter) {
         return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
-    // add direct light
-    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
-    if (rand(prd.seed) < lightsourceProb) { // importance sampling on light sources
-        radiance += DirectLight(state, -r.direction) * throughput / lightsourceProb;
     }
 
     BsdfSampleRec bsdfSampleRec;
     // Sampling for the next ray
     bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
     bsdfSampleRec.L = normalize(bsdfSampleRec.L);
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
-    }
-
-    if (bsdfSampleRec.pdf > 0.0) {
-        throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
-    }
-    else {
-        return false;
-    }
-
-    // Next ray
-    r.direction = bsdfSampleRec.L;
-    r.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-
-    return true;
-}
-bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout vec3 radiance, inout vec3 throughput, inout vec3 absorption) {
-
-    // Reset absorption when ray is going out of surface
-    if (dot(state.normal, state.ffnormal) > 0.0) {
-        absorption = vec3(0.0);
-    }
-
-    // KHR_materials_unlit
-    if (state.mat.unlit) {
-        radiance += state.mat.albedo * throughput;
-        return false;
-    }
-
-    // Add absoption (transmission / volume)
-    throughput *= exp(-absorption * prd.hitT);
-
-    BsdfSampleRec bsdfSampleRec;
-    // Sampling for the next ray
-    bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
-    bsdfSampleRec.L = normalize(bsdfSampleRec.L);
-
-    // Set absorption only if the ray is currently inside the object.
-    if (dot(state.ffnormal, bsdfSampleRec.L) < 0.0) {
-        absorption = -log(state.mat.attenuationColor) / vec3(state.mat.attenuationDistance);
-    }
 
     if (bsdfSampleRec.pdf > 0.0) {
         throughput *= bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
@@ -393,11 +330,10 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     prd.hitT = hitT;
     vec3 radiance = /*state.mat.emission*/ vec3(0.0);
     vec3 throughput = vec3(1.0);
-    vec3 absorption = vec3(0.0);
 
     { // first intersection
       // we don't want to reintroduce the luminance that direct stage has already done
-        if (!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput, absorption))
+        if (!UpdateSampleWithoutEmissionDirectLight(r, state, radiance, throughput))
             return radiance;
 #ifdef RR
         // For Russian-Roulette (minimizing live state)
@@ -416,28 +352,13 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
             return radiance;
         }
 
-        // Get Position, Normal, Tangents, Texture Coordinates, Color
-        ShadeState sstate = GetShadeState(prd);
-        state.position = sstate.position;
-        state.normal = sstate.normal;
-        state.tangent = sstate.tangent_u[0];
-        state.bitangent = sstate.tangent_v[0];
-        state.texCoord = sstate.text_coords[0];
-        state.matID = sstate.matIndex;
-        state.position = sstate.position;
-        state.isEmitter = false;
-        state.specularBounce = false;
-        state.isSubsurface = false;
-        state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+        // Get Position, Normal,Texture Coordinates
+        state = GetState(r);
 
         // Filling material structures
-        GetMaterialsAndTextures(state, r);
-        // we don't use vertex color cause there isn't enough room for it in the Gbuffer
-        // state.mat.albedo *= sstate.color;
+        GetMaterials(state, r);
 
-        // Save as above. we don't want to reintroduce the first direct lighting
-        // but second direct lighting is allowed
-        if (!UpdateSampleWithoutEmission(r, state, radiance, throughput, absorption))
+        if (!UpdateSampleWithoutEmission(r, state, radiance, throughput))
             return radiance;
 
 #ifdef RR
@@ -466,26 +387,13 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
                 return radiance + (env * rtxState.hdrMultiplier * throughput);
             }
 
-            // Get Position, Normal, Tangents, Texture Coordinates, Color
-            ShadeState sstate = GetShadeState(prd);
-            state.position = sstate.position;
-            state.normal = sstate.normal;
-            state.tangent = sstate.tangent_u[0];
-            state.bitangent = sstate.tangent_v[0];
-            state.texCoord = sstate.text_coords[0];
-            state.matID = sstate.matIndex;
-            state.position = sstate.position;
-            state.isEmitter = false;
-            state.specularBounce = false;
-            state.isSubsurface = false;
-            state.ffnormal = dot(state.normal, r.direction) <= 0.0 ? state.normal : -state.normal;
+            // Get Position, Normal, Texture Coordinates
+            state = GetState(r);
 
             // Filling material structures
-            GetMaterialsAndTextures(state, r);
-            // Color at vertices
-            // state.mat.albedo *= sstate.color;
+            GetMaterials(state, r);
 
-            if (!UpdateSample(r, state, hitT, radiance, throughput, absorption))
+            if (!UpdateSample(r, state, hitT, radiance, throughput))
                 return radiance;
 
 #ifdef RR
@@ -501,28 +409,26 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
     return radiance;
 }
 
-const uint NullMatId = 0xffffu;
-
-uvec4 encodeGeometryInfo(vec3 color, vec3 normal, float depth, uint matId) {
+uvec4 encodeGeometryInfo(State state, float depth) {
     uvec4 gInfo;
-    gInfo.x = packUnormYCbCr(color);
-    gInfo.y = compress_unit_vec(normal);
-    gInfo.z = floatBitsToUint(depth);
-    gInfo.w = matId;
+    gInfo.x = floatBitsToUint(depth);
+    gInfo.y = compress_unit_vec(state.normal);
+    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
+    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0)) & 0xFFFFFF; //agbr
+    gInfo.w += hash8bit(state.matID);
     return gInfo;
 }
 
-void decodeGeometryInfo(uvec4 gInfo, out vec3 color, out vec3 normal, out float depth, out uint matId) {
-    color = unpackUnormYCbCr(gInfo.x);
+void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
+    uvec2 gInfo = imageLoad(lastGbuffer, imageCoords).xy;
     normal = decompress_unit_vec(gInfo.y);
-    depth = uintBitsToFloat(gInfo.z);
-    matId = gInfo.w;
+    depth = uintBitsToFloat(gInfo.x);
 }
-
-void decodeGeometryInfo(uvec4 gInfo, out vec3 normal, out float depth, out uint matId) {
+void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, out uint matHash) {
+    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
     normal = decompress_unit_vec(gInfo.y);
-    depth = uintBitsToFloat(gInfo.z);
-    matId = gInfo.w;
+    depth = uintBitsToFloat(gInfo.x);
+    matHash = gInfo.w & 0xFF000000;
 }
 
 vec3 PHat(Reservoir resv, State state, vec3 wo) {
@@ -537,20 +443,21 @@ float BigW(Reservoir resv, State state, vec3 wo) {
 bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
     int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
-    uvec4 gInfo = imageLoad(lastGbuffer, lastCoord);
-    vec3 pnorm; float pdepth; uint pmatId;
-    decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
+    vec3 pnorm; float pdepth; uint matHash;
+    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
 
     bool diff = false;
     if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x || lastCoord.x < 0 || lastCoord.y >= rtxState.size.y) {
         return false;
     }
-    else if (pmatId != matId || pmatId == NullMatId) {
+    else if (hash8bit(matId) != matHash)
+        return false;
+    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
         return false;
     }
-    else if (dot(norm, pnorm) < 0.9 || abs(depth - pdepth) > depth * 0.1 /*|| (pdepth < reprojDepth - 1e-6)*/) {
-        return false;
-    }
+    // else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth) {
+    //     return false;
+    // }
     resv = lastDirectResv[pidx];
     return true;
 }
@@ -566,15 +473,11 @@ bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out Reservoir resv)
     int py = int(float(imageCoords.y + p.y) + 0.5);
     int pidx = py * rtxState.size.x + px;
 
-    uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
-    vec3 pnorm; float pdepth; uint pmatId;
-    decodeGeometryInfo(gInfo, pnorm, pdepth, pmatId);
+    vec3 pnorm; float pdepth;
+    loadLastGeometryInfo(imageCoords, pnorm, pdepth);
 
     bool diff = false;
     if (px < 0 || px >= rtxState.size.x || py < 0 || py >= rtxState.size.y) {
-        return false;
-    }
-    else if (pmatId != matId || pmatId == NullMatId) {
         return false;
     }
     else if (dot(norm, pnorm) < 0.1 || abs(depth - pdepth) > depth * 0.1) {
@@ -615,21 +518,15 @@ vec2 createMotionVector(vec3 pos) {
 
 ivec2 createMotionIndex(vec3 pos) {
     //return min(ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)), rtxState.size - 1);
-    return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1));
-}
-
-float toLastLinearDepth(vec3 pos) {
-    vec4 proj = sceneCamera.lastProjView * vec4(pos, 1.0);
-    proj /= proj.w;
-    return -CAMERA_NEAR * CAMERA_FAR / ((CAMERA_FAR - CAMERA_NEAR) * proj.z - CAMERA_FAR);
+    return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)) + 1;
 }
 
 vec3 DirectSample(Ray r) {
     int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
     uvec4 gInfo;
     ClosestHit(r);
-
-    if (prd.hitT >= INFINITY) {
+    float depth = prd.hitT;
+    if (depth >= INFINITY) {
 
         vec3 env;
         if (_sunAndSky.in_use == 1) {
@@ -640,27 +537,18 @@ vec3 DirectSample(Ray r) {
             env = texture(environmentTexture, uv).rgb;
         }
         // Done sampling return
-        imageStore(thisGbuffer, imageCoords, uvec4(0, 0, floatBitsToUint(INFINITY), NullMatId));
+        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
         imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
         return (env * rtxState.hdrMultiplier);
     }
     State state = GetState(r);
     // Filling material structures
-    GetMaterialsAndTextures(state, r);
+    GetMaterials(state, r);
 
-    // Color at vertices
-    // state.mat.albedo *= sstate.color;
-    // Normal, Tangent, TexCoord, Material ID
-    /*
-    gInfo.y = compress_unit_vec(state.normal);
-    gInfo.z = packUnorm2x16(state.texCoord);
-    gInfo.x = packTangent(state.normal, state.tangent);
-    gInfo.x = (state.matID << 16) + (gInfo.x << 16 >> 16);
-    */
     ivec2 motionIdx = createMotionIndex(state.position);
     imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
 
-    gInfo = encodeGeometryInfo(state.mat.albedo, state.normal, prd.hitT, state.matID);
+    gInfo = encodeGeometryInfo(state, depth);
     imageStore(thisGbuffer, imageCoords, gInfo);
     barrier();
 
@@ -668,35 +556,117 @@ vec3 DirectSample(Ray r) {
         return DebugInfo(state);
     }
 
-    if (state.mat.unlit) {
-        return state.mat.emission + state.mat.albedo;
+    if (state.isEmitter) {
+        return state.mat.emission;
     }
 
     vec3 wo = -r.direction;
     vec3 direct = vec3(0.0);
     vec3 albedo = state.mat.albedo;
     state.mat.albedo = vec3(1.0);
-
 #ifndef DIRECT_ONLY
-    float lightsourceProb = min(state.mat.roughness * 2.0, 1.0);
-    if (rand(prd.seed) < lightsourceProb) {
+    float directProb = min((state.mat.roughness - 0.001) * 2.0, 1.0);
+    bool directSampling = (rand(prd.seed) < directProb);
+    // directSampling = false;
+#else 
+    float directProb = 1.0;
+    bool directSampling = true;
 #endif
-        if (rtxState.ReSTIRState == eNone) {
-            direct = DirectLight(state, wo);
-        }
-        else {
-            Reservoir resv;
-            resvReset(resv);
+    // no ris
+    if (rtxState.ReSTIRState == eNone) {
+        // importance sampling on brdf
+        if (!directSampling) {
+            Ray shadowRay;
+            BsdfSampleRec bsdfSampleRec;
+            bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
 
+            if (!IsPdfInvalid(bsdfSampleRec.pdf)) {
+                vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
+                shadowRay.direction = bsdfSampleRec.L;
+                shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+                ClosestHit(shadowRay);
+                if (prd.hitT >= INFINITY) {
+                    vec3 env;
+                    if (_sunAndSky.in_use == 1)
+                        env = sun_and_sky(_sunAndSky, shadowRay.direction);
+                    else {
+                        vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
+                        env = texture(environmentTexture, uv).rgb;
+                    }
+                    // Done sampling return
+                    direct = (env * rtxState.hdrMultiplier) * throughput;
+                }
+                else {
+                    State state2;
+                    ShadeState sstate = GetShadeState(prd);
+                    state2.matID = sstate.matIndex;
+                    state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
+                    GetMaterials(state2, shadowRay);
+
+                    direct = state2.mat.emission * throughput;
+                }
+            }
+            direct /= 1.0 - directProb;
+        }
+        // direct sampling
+        else {
+            direct = DirectLight(state, wo) / directProb;
+        }
+    }
+    else {
+        Reservoir resv;
+        resvReset(resv);
+        // importance sampling on brdf and store one sample into reservoir
+        if (!directSampling) {
+            Ray shadowRay;
+            resv.lightSample.Li = vec3(0.0);
+            float p;
+            vec3 bsdf = Sample(state, -r.direction, state.ffnormal, resv.lightSample.wi, p, prd.seed);
+            wo = -r.direction;
+            p *= 1.0 - directProb;
+            if (!IsPdfInvalid(p)) {
+                shadowRay.direction = resv.lightSample.wi;
+                shadowRay.origin = OffsetRay(state.position, dot(resv.lightSample.wi, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
+                ClosestHit(shadowRay);
+                resv.lightSample.dist = prd.hitT;
+                resv.num = 1;
+                if (prd.hitT >= INFINITY) {
+                    vec3 env;
+                    if (_sunAndSky.in_use == 1)
+                        env = sun_and_sky(_sunAndSky, shadowRay.direction);
+                    else {
+                        vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
+                        env = texture(environmentTexture, uv).rgb;
+                    }
+                    resv.lightSample.Li = (env * rtxState.hdrMultiplier);
+                }
+                else {
+                    State state2;
+                    ShadeState sstate = GetShadeState(prd);
+                    state2.matID = sstate.matIndex;
+                    state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
+                    GetMaterials(state2, shadowRay);
+
+                    resv.lightSample.Li = state2.mat.emission;
+                }
+                vec3 g = resv.lightSample.Li * bsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
+                resv.lightSample.pHat = resvToScalar(g);
+                resv.weight = resv.lightSample.pHat / p;
+                if (isnan(resv.weight)) { resv.weight = 0.0; resv.num = 0; }
+            }
+        }
+        // direct sampling with ris and store the sample into reservoir
+        else {
             for (int i = 0; i < rtxState.RISSampleNum; i++) {
                 LightSample lsample;
-                float p = SampleDirectLightNoVisibility(state.position, lsample);
+                float p = SampleDirectLightNoVisibility(state.position, lsample) * directProb;
+                float weight = 0.0;
 
-                vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
-                float weight = resvToScalar(g / p);
-
-                if (IsPdfInvalid(p) || isnan(weight)) {
-                    weight = 0.0;
+                if (!IsPdfInvalid(p)) {
+                    vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
+                    lsample.pHat = resvToScalar(g);
+                    weight = lsample.pHat / p;
+                    if (isnan(weight)) weight = 0.0;
                 }
                 resvUpdate(resv, lsample, weight, rand(prd.seed));
             }
@@ -708,104 +678,76 @@ vec3 DirectSample(Ray r) {
             if (Occlusion(shadowRay, state, lsample.dist)) {
                 resv.weight = 0.0;
             }
+        }
 
-            if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
-                //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
-                float reprojDepth = toLastLinearDepth(state.position);
-                Reservoir temporal;
-                if (findTemporalNeighbor(state.normal, prd.hitT, reprojDepth, state.matID, motionIdx + 1, temporal)) {
-                    if (!resvInvalid(temporal)) {
-                        //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
-                        resvMerge(resv, temporal, rand(prd.seed));
-                    }
+        //temproal reuse
+        if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
+            //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
+            float reprojDepth = length(sceneCamera.lastPosition - state.position);
+            Reservoir temporal;
+            
+            // if ((gl_GlobalInvocationID.x == motionIdx.x && gl_GlobalInvocationID.y == motionIdx.y) || state.mat.roughness > 0.2) {
+            if (findTemporalNeighbor(state.normal, depth, reprojDepth, state.matID, motionIdx, temporal)) {
+                if (!resvInvalid(temporal)) {
+                    //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
+                    resvMerge(resv, temporal, rand(prd.seed));
                 }
-            }
-
-            Reservoir tempResv = resv;
-
-            if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
-                Reservoir spatial;
-                resvReset(spatial);
-
-                barrier();
-                resvCheckValidity(resv);
-                cacheTempReservoir(resv);
-                barrier();
-
-                Reservoir spatialAggregate;
-                if (mergeSpatialNeighbors(state.normal, prd.hitT, state.matID, spatialAggregate)) {
-                    if (!resvInvalid(spatialAggregate)) {
-                        resvMerge(spatial, spatialAggregate, rand(prd.seed));
-                    }
-                }
-                barrier();
-                resvCheckValidity(resv);
-                cacheTempReservoir(resv);
-                barrier();
-
-                if (mergeSpatialNeighbors(state.normal, prd.hitT, state.matID, spatialAggregate)) {
-                    if (!resvInvalid(spatialAggregate)) {
-                        resvMerge(spatial, spatialAggregate, rand(prd.seed));
-                    }
-                }
-
-                if (!resvInvalid(spatial)) {
-                    //resvClamp(spatial, 128);
-                    resvMerge(resv, spatial, rand(prd.seed));
-                }
-            }
-            resvCheckValidity(tempResv);
-            resvClamp(tempResv, rtxState.RISSampleNum * rtxState.reservoirClamp);
-            saveNewReservoir(tempResv);
-            lsample = resv.lightSample;
-
-            if (!resvInvalid(resv)) {
-                vec3 LiBsdf = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf);
-                direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num);
             }
         }
-#ifndef DIRECT_ONLY
-        direct /= lightsourceProb;
-    }
-    else {
-        Ray shadowRay;
-        BsdfSampleRec bsdfSampleRec;
-        bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
 
-        if (bsdfSampleRec.pdf > 0.0) {
-            vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
-            shadowRay.direction = bsdfSampleRec.L;
-            shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-            ClosestHit(shadowRay);
-            if (prd.hitT >= INFINITY) {
-                vec3 env;
-                if (_sunAndSky.in_use == 1)
-                    env = sun_and_sky(_sunAndSky, shadowRay.direction);
-                else {
-                    vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
-                    env = texture(environmentTexture, uv).rgb;
+        // store the reservoir before spatial reuse
+        resvCheckValidity(resv);
+        resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
+        saveNewReservoir(resv);
+
+        // spatial reuse
+        if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
+            Reservoir spatial;
+            resvReset(spatial);
+
+            barrier();
+            resvCheckValidity(resv);
+            cacheTempReservoir(resv);
+            barrier();
+
+            Reservoir spatialAggregate;
+            if (mergeSpatialNeighbors(state.normal, depth, state.matID, spatialAggregate)) {
+                if (!resvInvalid(spatialAggregate)) {
+                    resvMerge(spatial, spatialAggregate, rand(prd.seed));
                 }
-                // Done sampling return
-                direct = (env * rtxState.hdrMultiplier) * throughput;
             }
-            else {
-                State state2;
-                ShadeState sstate = GetShadeState(prd);
-                state2.matID = sstate.matIndex;
-                state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
-                GetMaterialsAndTextures(state2, shadowRay);
+            barrier();
+            resvCheckValidity(resv);
+            cacheTempReservoir(resv);
+            barrier();
 
-                direct = state2.mat.emission * throughput;
+            if (mergeSpatialNeighbors(state.normal, depth, state.matID, spatialAggregate)) {
+                if (!resvInvalid(spatialAggregate)) {
+                    resvMerge(spatial, spatialAggregate, rand(prd.seed));
+                }
+            }
+
+            if (!resvInvalid(spatial)) {
+                //resvClamp(spatial, 128);
+                resvMerge(resv, spatial, rand(prd.seed));
             }
         }
-        direct /= 1.0 - lightsourceProb;
+
+        if (!resvInvalid(resv)) {
+            vec3 LiBsdf = Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf);
+            direct = resv.lightSample.Li * LiBsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
+            direct = direct / resv.lightSample.pHat * resv.weight / float(resv.num);
+            // direct = LiBsdf;
+        }
     }
-#endif
+
+
     if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
         direct = vec3(0.0);
     }
-    //direct = vec3(vec2(motionIdx) / vec2(rtxState.size), 0);
+    // direct = vec3(vec2(motionIdx) / vec2(rtxState.size), 0);
     return state.mat.emission + direct * albedo;
+    // return direct;
 }
 
 //-----------------------------------------------------------------------
@@ -825,14 +767,14 @@ Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
     vec4 direction = sceneCamera.viewInverse * vec4(normalize(target.xyz), 0);
 
     // Depth-of-Field
-    vec3 focalPoint = sceneCamera.focalDist * direction.xyz;
-    float cam_r1 = rand(prd.seed) * M_TWO_PI;
+    // vec3 focalPoint = sceneCamera.focalDist * direction.xyz;
+    // float cam_r1 = rand(prd.seed) * M_TWO_PI;
     //float cam_r2 = rand(prd.seed) * sceneCamera.aperture;
-    float cam_r2 = 0.0;
-    vec4 cam_right = sceneCamera.viewInverse * vec4(1, 0, 0, 0);
-    vec4 cam_up = sceneCamera.viewInverse * vec4(0, 1, 0, 0);
-    vec3 randomAperturePos = (cos(cam_r1) * cam_right.xyz + sin(cam_r1) * cam_up.xyz) * sqrt(cam_r2);
-    vec3 finalRayDir = normalize(focalPoint - randomAperturePos);
+    // float cam_r2 = 0.0;
+    // vec4 cam_right = sceneCamera.viewInverse * vec4(1, 0, 0, 0);
+    // vec4 cam_up = sceneCamera.viewInverse * vec4(0, 1, 0, 0);
+    // vec3 randomAperturePos = (cos(cam_r1) * cam_right.xyz + sin(cam_r1) * cam_up.xyz) * sqrt(cam_r2);
+    // vec3 finalRayDir = normalize(focalPoint - randomAperturePos);
 
-    return Ray(origin.xyz, finalRayDir);
+    return Ray(origin.xyz, /*finalRayDir*/ direction.xyz);
 }

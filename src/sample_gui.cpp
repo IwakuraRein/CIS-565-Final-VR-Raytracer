@@ -108,7 +108,7 @@ bool SampleGUI::guiCamera()
 	bool changed{ false };
 	changed |= ImGuiH::CameraWidget();
 	auto& cam = _se->m_scene.getCamera();
-	changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
+	//changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
 
 	return changed;
 }
@@ -130,8 +130,6 @@ bool SampleGUI::guiRayTracing()
 		"Value of 1, will not de-scale",
 		&_se->m_descalingLevel, nullptr, Normal, 1, 8);
 
-	changed |= GuiH::Selection("Pbr Mode", "PBR material model", &rtxState.pbrMode, nullptr, Normal, { "Disney", "Gltf", "Metallic Workflow" });
-
 	changed |= GuiH::Selection("Debug Mode", "Display unique values of material", &rtxState.debugging_mode, nullptr, Normal,
 		{
 			"No Debug",
@@ -142,13 +140,13 @@ bool SampleGUI::guiRayTracing()
 			"Depth",
 			"Metallic",
 			"Emissive",
-			"Alpha",
+			//"Alpha",
 			"Roughness",
 			"TexCoord",
-			"Tangent",
+			//"Tangent",
 			// "HeatMap",
 		});
-	changed |= GuiH::Checkbox("Accumulate", "", &rtxState.accumulate);
+	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
 
 	// if (rtxState.debugging_mode == eHeatmap)
 	// {
@@ -169,8 +167,8 @@ bool SampleGUI::guiRayTracing()
 			"Spatiotemporal"
 		});
 
-	changed |= GuiH::Slider("RIS Sample Num", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
-	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1000);
+	changed |= GuiH::Slider("RIS Repeat", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
+	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1600);
 
 	GuiH::Group<bool>("Direct Light", false, [&] {
 		changed |= GuiH::Slider("Environment Weight",

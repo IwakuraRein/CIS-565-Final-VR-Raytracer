@@ -159,13 +159,15 @@ public:
 
 		1,       // hdrMultiplier;
 		0,       // debugging_mode;
-		2,       // pbrMode;
-		0.25f,
+		0.25f,  //environmentProb
+		0,   //time
+
+		0,
+		16,
+		80,      // clamp
+		0,       // accumulate
 
 		{0, 0},  // size;
-		0,       // minHeatmap;
-		65000,   // maxHeatmap;
-		0
 	};
 
 	SunAndSky m_sunAndSky{
