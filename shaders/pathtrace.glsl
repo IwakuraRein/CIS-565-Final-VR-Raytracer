@@ -650,7 +650,8 @@ vec3 DirectSample(Ray r) {
                     resv.lightSample.Li = state2.mat.emission;
                 }
                 vec3 g = resv.lightSample.Li * bsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
-                resv.weight = resvToScalar(g / p);
+                resv.lightSample.pHat = resvToScalar(g);
+                resv.weight = resv.lightSample.pHat / p;
                 if (isnan(resv.weight)) { resv.weight = 0.0; resv.num = 0; }
             }
         }
@@ -663,7 +664,8 @@ vec3 DirectSample(Ray r) {
 
                 if (!IsPdfInvalid(p)) {
                     vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
-                    weight = resvToScalar(g / p);
+                    lsample.pHat = resvToScalar(g);
+                    weight = lsample.pHat / p;
                     if (isnan(weight)) weight = 0.0;
                 }
                 resvUpdate(resv, lsample, weight, rand(prd.seed));
@@ -684,13 +686,13 @@ vec3 DirectSample(Ray r) {
             float reprojDepth = length(sceneCamera.lastPosition - state.position);
             Reservoir temporal;
             
-            if ((gl_GlobalInvocationID.x == motionIdx.x && gl_GlobalInvocationID.y == motionIdx.y) || state.mat.roughness > 0.2) {
+            // if ((gl_GlobalInvocationID.x == motionIdx.x && gl_GlobalInvocationID.y == motionIdx.y) || state.mat.roughness > 0.2) {
             if (findTemporalNeighbor(state.normal, depth, reprojDepth, state.matID, motionIdx, temporal)) {
                 if (!resvInvalid(temporal)) {
                     //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
                     resvMerge(resv, temporal, rand(prd.seed));
                 }
-            }}
+            }
         }
 
         // store the reservoir before spatial reuse
@@ -733,8 +735,8 @@ vec3 DirectSample(Ray r) {
 
         if (!resvInvalid(resv)) {
             vec3 LiBsdf = Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf);
-            direct = resv.lightSample.Li * LiBsdf;
-            direct = direct / resvToScalar(direct) * resv.weight / float(resv.num);
+            direct = resv.lightSample.Li * LiBsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
+            direct = direct / resv.lightSample.pHat * resv.weight / float(resv.num);
             // direct = LiBsdf;
         }
     }

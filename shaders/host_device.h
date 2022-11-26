@@ -229,6 +229,7 @@ struct LightSample{
 	vec3 Li;
 	vec3 wi;
 	float dist;
+	float pHat;
 };
 
 struct Reservoir {
