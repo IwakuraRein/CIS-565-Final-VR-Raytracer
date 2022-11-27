@@ -89,26 +89,27 @@ uvec4 encodeGeometryInfo(State state, float depth) {
 bool findTemporalNeighbor(
     vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out DirectReservoir resv
 ) {
-    int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
     vec3 pnorm; float pdepth; uint matHash;
-    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
 
-    bool diff = false;
-    if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x ||
-        lastCoord.y < 0 || lastCoord.y >= rtxState.size.y) {
-        return false;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
+            loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
+            if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x ||
+                lastCoord.y < 0 || lastCoord.y >= rtxState.size.y) {
+                continue;
+            }
+            else if (hash8bit(matId) != matHash)
+                continue;
+            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+                continue;
+            }
+            resv = lastDirectResv[lastCoord.y * rtxState.size.x + lastCoord.x];
+            return true;
+        }
     }
-    else if (hash8bit(matId) != matHash)
-        return false;
-    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
-        return false;
-    }
-    // else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth) {
-    //     return false;
-    // }
-    resv = lastDirectResv[pidx];
-    return true;
+    return false;
 }
 
 /*
@@ -313,7 +314,7 @@ vec3 DirectSample(Ray r) {
                 if (isnan(resv.weight)) { resv.weight = 0.0; resv.num = 0; }
             }
         }
-        // direct sampling with ris and store the sample into reservoir
+        // direct sampling with ris and store the samples into reservoir
         else {
             for (int i = 0; i < rtxState.RISSampleNum; i++) {
                 LightSample lsample;
@@ -452,7 +453,8 @@ vec3 ReSTIRDirect(Ray r) {
             float p = SampleDirectLightNoVisibility(state.position, lsample);
 
             vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
-            float weight = resvToScalar(g / p);
+            lsample.pHat = resvToScalar(g);
+            float weight = lsample.pHat / p;
 
             if (IsPdfInvalid(p) || isnan(weight)) {
                 weight = 0.0;
@@ -520,7 +522,7 @@ vec3 ReSTIRDirect(Ray r) {
 
         if (!resvInvalid(resv)) {
             vec3 LiBsdf = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf);
-            direct = LiBsdf / resvToScalar(LiBsdf) * resv.weight / float(resv.num);
+            direct = LiBsdf / lsample.pHat * resv.weight / float(resv.num);
         }
     }
 

@@ -92,8 +92,16 @@ bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   state.mat.roughness = matInfo.y;
   state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
   state.mat.transmission = matInfo.w;
-  state.matID = gInfo.w >> 24;
+  state.matID = gInfo.w >> 24; // hashed matarial id
   return true;
+}
+
+uvec2 encodeMaterialInfo(State state) {
+    uvec2 matInfo;
+    matInfo.x = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
+    matInfo.y = packUnorm4x8(vec4(state.mat.albedo, 1.0)) & 0xFFFFFF; //agbr
+    matInfo.y += hash8bit(state.matID);
+    return matInfo;
 }
 
 float MIS(float f, float g) {
@@ -103,34 +111,38 @@ float MIS(float f, float g) {
 bool findTemporalNeighbor(
     vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out IndirectReservoir resv
 ) {
-    if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x ||
-        lastCoord.y < 0 || lastCoord.y >= rtxState.size.y) {
-        return false;
-    }
-    int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
     vec3 pnorm; float pdepth; uint matHash;
-    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
 
-    if (hash8bit(matId) != matHash) {
-        return false;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
+            loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
+            if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x ||
+                lastCoord.y < 0 || lastCoord.y >= rtxState.size.y) {
+                continue;
+            }
+            else if (hash8bit(matId) != matHash)
+                continue;
+            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+                continue;
+            }
+            resv = lastIndirectResv[lastCoord.y * rtxState.size.x + lastCoord.x];
+            return true;
+        }
     }
-    else if (dot(norm, pnorm) < 0.9 || reprojDepth > pdepth * 1.05) {
-        return false;
-    }
-    resv = lastIndirectResv[pidx];
-    return true;
+    return false;
 }
 
-vec3 pHatIndirect(GISample giSample, State state, vec3 wo) {
-    return giSample.L;
+float pHatIndirect(GISample giSample, State state, vec3 wo) {
+    return resvToScalar(giSample.L);
 
     vec3 wi = normalize(giSample.xs - giSample.xv);
-    return giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi);
+    return resvToScalar(giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi));
 }
 
 float bigWIndirect(IndirectReservoir resv, State state, vec3 wo) {
-    return resv.weight / (resvToScalar(pHatIndirect(resv.giSample, state, wo)) * float(resv.num));
+    return resv.weight / (pHatIndirect(resv.giSample, state, wo) * float(resv.num));
 }
 
 GISample newGISample() {
@@ -173,7 +185,7 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         float samplePdf;
         vec3 sampleBSDF = Sample(state, wo, state.ffnormal, sampleWi, samplePdf, prd.seed);
 
-        if (IsPdfInvalid(samplePdf) || samplePdf < 1e-8) {
+        if (IsPdfInvalid(samplePdf)) {
             break;
         }
 
@@ -199,9 +211,13 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
 
             if (depth == 1) {
                 // Hack here. To let samples from the infinity light able to be temporally reused
+                // giSample.matInfo = uvec2(0xFFFFFFFF, 0xFFFFFFFF);
                 giSample.xs = state.position + sampleWi * INFINITY * 0.8;
                 giSample.ns = -sampleWi;
             }
+            // if (depth == 2) {
+            //     giSample.ws = sampleWi;
+            // }
             break;
         }
 
@@ -209,23 +225,30 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         GetMaterials(state, ray);
 
         if (state.isEmitter) {
-            float lightPdf;
-            vec3 Li = LightEval(state, prd.hitT, sampleWi, lightPdf);
-            float weight = MIS(samplePdf, lightPdf);
-            giSample.L += Li * throughput * weight;
+            if (depth > 1) {
+                float lightPdf;
+                vec3 Li = LightEval(state, prd.hitT, sampleWi, lightPdf);
+                float weight = MIS(samplePdf, lightPdf);
+                giSample.L += Li * throughput * weight;
+            }
 
             if (depth == 1) {
                 giSample.xs = state.position;
                 giSample.ns = state.ffnormal;
             }
+            // if (depth == 2) {
+            //     giSample.ws = sampleWi;
+            // }
             break;
-            return giSample.L;
         }
 
         if (depth == 1) {
             giSample.xs = state.position;
             giSample.ns = state.ffnormal;
         }
+        // if (depth == 2) {
+        //     giSample.ws = sampleWi;
+        // }
 
 #ifdef RR
         float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
@@ -241,10 +264,12 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
 
     float sampleWeight = 0.0;
     if (GISampleValid(giSample)) {
-        sampleWeight = resvToScalar(pHatIndirect(giSample, primState, primWo) / primSamplePdf);
+        giSample.pHat = pHatIndirect(giSample, primState, primWo);
+        sampleWeight = (giSample.pHat / primSamplePdf);
         if (isnan(sampleWeight) || sampleWeight < 0.0) {
             sampleWeight = 0.0;
         }
+        // giSample.matInfo = encodeMaterialInfo(state);
     }
     resvUpdate(resv, giSample, sampleWeight, rand(prd.seed));
 
@@ -271,7 +296,19 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi) * satDot(giSample.nv, primWi) *
             bigWIndirect(resv, primState, primWo);
             */
-        indirect = giSample.L / resvToScalar(giSample.L) * resv.weight / float(resv.num);
+        // if (giSample.matInfo.x != 0xFFFFFFFF){
+        //     state.position = giSample.xs;
+        //     state.normal = giSample.ns;
+        //     state.ffnormal = dot(state.normal, primWi) <= 0.0 ? state.normal : -state.normal;
+        //     state.mat.albedo = unpackUnorm4x8(giSample.matInfo.x).xyz;
+        //     vec4 matInfo = unpackUnorm4x8(giSample.matInfo.y);
+        //     state.mat.metallic = matInfo.x;
+        //     state.mat.roughness = matInfo.y;
+        //     state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
+        //     state.mat.transmission = matInfo.w;
+        //     giSample.L *= BSDF(state, -primWi, state.ffnormal, giSample.ws) * absDot(giSample.ns, giSample.ws);
+        // }
+        indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
         indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
     }
 

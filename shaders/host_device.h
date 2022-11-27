@@ -36,6 +36,8 @@ using vec3 = nvmath::vec3f;
 using vec4 = nvmath::vec4f;
 using mat4 = nvmath::mat4f;
 using uint = unsigned int;
+using uvec4 = nvmath::vec4ui;
+using uvec2 = nvmath::vec2ui;
 #endif
 
 // clang-format off
@@ -238,6 +240,7 @@ struct GISample {
 	vec3 L;
 	vec3 xv, nv;
 	vec3 xs, ns;
+	float pHat;
 };
 
 struct DirectReservoir {

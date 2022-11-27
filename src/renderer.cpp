@@ -113,7 +113,7 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 
 	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
-	m_debug.setObjectName(m_indirectPipeline, "RendererIndirect");
+	m_debug.setObjectName(m_indirectPipeline, "Renderer-Indirect");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 	timer.print();

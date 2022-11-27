@@ -37,7 +37,7 @@
 float dummyPdf;
 
 bool IsPdfInvalid(float p) {
-    return p <= 0.0 || isnan(p);
+    return p <= 1e-8 || isnan(p);
 }
 
 bool Occlusion(Ray ray, State state, float dist) {
