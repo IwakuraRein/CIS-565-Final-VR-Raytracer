@@ -122,7 +122,7 @@ bool SampleGUI::guiRayTracing()
 	bool  changed{ false };
 	auto& rtxState(_se->m_rtxState);
 
-	changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 2, 16);
+	changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
 	changed |= GuiH::Slider("Max Iteration ", "", &_se->m_maxFrames, nullptr, Normal, 1, 1000);
 	changed |= GuiH::Slider("De-scaling ",
 		"Reduce resolution while navigating.\n"

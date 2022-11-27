@@ -179,4 +179,8 @@ float powerHeuristic(float f, float g) {
     return f2 / (f2 + g * g);
 }
 
+bool hasNan(vec3 v) {
+    return isnan(v.x) || isnan(v.y) || isnan(v.z);
+}
+
 #endif  // RAYCOMMON_GLSL

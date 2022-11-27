@@ -96,14 +96,13 @@ END_ENUM();
 START_ENUM(RayQBindings)
 eLastGbuffer = 0,
 eThisGbuffer = 1,
-//eLastDirectCache = 2,
-//eLastIndirectCache = 3,
-//eThisDirectCache = 4,
-//eThisIndirectCache = 5,
 eLastDirectResv = 2,
 eThisDirectResv = 3,
 eTempDirectResv = 4,
-eMotionVector = 5
+eLastIndirectResv = 5,
+eThisIndirectResv = 6,
+eTempIndirectResv = 7,
+eMotionVector = 8
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -204,6 +203,7 @@ struct RtxState
 
 	ivec2 size;		// rendering size
 	float envMapLuminIntegInv;
+	float lightLuminIntegInv;
 	int MIS;
 };
 
@@ -227,7 +227,7 @@ const int LightType_Spot = 2;
 const int LightType_Triangle = 3;
 
 // ReSTIR
-struct LightSample{
+struct LightSample {
 	vec3 Li;
 	vec3 wi;
 	float dist;
@@ -240,15 +240,15 @@ struct GISample {
 	vec3 xs, ns;
 };
 
-struct Reservoir {
+struct DirectReservoir {
 	LightSample lightSample;
 	uint num;
 	float weight;
 };
 
-struct GIReservoir {
-	GISample lightSample;
-	uint num;
+struct IndirectReservoir {
+	GISample giSample;
+	uint	 num;
 	float weight;
 };
 

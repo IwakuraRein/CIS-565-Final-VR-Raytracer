@@ -54,16 +54,17 @@ layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky 
 layout(set = S_ENV, binding = eHdr)						uniform sampler2D		environmentTexture;
 layout(set = S_ENV, binding = eImpSamples,  scalar)		buffer _EnvSampBuffer	{ ImptSampData envSamplingData[]; };
 
-// layout(set = S_RAYQ, binding = eLastDirectCache)   uniform uimage2D lastDirectCache;
-// layout(set = S_RAYQ, binding = eThisDirectCache)   uniform uimage2D thisDirectCache;
-// layout(set = S_RAYQ, binding = eLastIndirectCache) uniform readonly uimage2D lastIndirectCache; 
-// layout(set = S_RAYQ, binding = eThisIndirectCache) uniform uimage2D thisIndirectCache; 
 layout(set = S_RAYQ, binding = eLastGbuffer)       uniform readonly uimage2D lastGbuffer; 
 layout(set = S_RAYQ, binding = eThisGbuffer)       uniform uimage2D thisGbuffer;
 layout(set = S_RAYQ, binding = eMotionVector)      uniform iimage2D motionVector;
-layout(set = S_RAYQ, binding = eLastDirectResv, scalar) buffer _LastDirectResv { Reservoir lastDirectResv[]; };
-layout(set = S_RAYQ, binding = eThisDirectResv, scalar) buffer _ThisDirectResv { Reservoir thisDirectResv[]; };
-layout(set = S_RAYQ, binding = eTempDirectResv, scalar) buffer _TempDirectResv { Reservoir tempDirectResv[]; };
+
+layout(set = S_RAYQ, binding = eLastDirectResv, scalar) buffer _LastDirectResv { DirectReservoir lastDirectResv[]; };
+layout(set = S_RAYQ, binding = eThisDirectResv, scalar) buffer _ThisDirectResv { DirectReservoir thisDirectResv[]; };
+layout(set = S_RAYQ, binding = eTempDirectResv, scalar) buffer _TempDirectResv { DirectReservoir tempDirectResv[]; };
+
+layout(set = S_RAYQ, binding = eLastIndirectResv, scalar) buffer _LastIndirectResv { IndirectReservoir lastIndirectResv[]; };
+layout(set = S_RAYQ, binding = eThisIndirectResv, scalar) buffer _ThisIndirectResv { IndirectReservoir thisIndirectResv[]; };
+layout(set = S_RAYQ, binding = eTempIndirectResv, scalar) buffer _TempIndirectResv { IndirectReservoir tempIndirectResv[]; };
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

@@ -169,6 +169,7 @@ public:
 
 		{0, 0},  // size;
 		0,       // environment map luminance integral inverse
+		0,
 		true,    // MIS
 	};
 

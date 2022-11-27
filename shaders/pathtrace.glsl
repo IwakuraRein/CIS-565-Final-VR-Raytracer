@@ -32,25 +32,12 @@
 #include "punctual.glsl"
 #include "env_sampling.glsl"
 #include "shade_state.glsl"
-#include "restir.glsl"
+#include "reservoir.glsl"
 
 float dummyPdf;
 
 bool IsPdfInvalid(float p) {
     return p <= 0.0 || isnan(p);
-}
-
-State GetState(Ray incomingRay) {
-    State state;
-    ShadeState sstate = GetShadeState(prd);
-    state.position = sstate.position;
-    state.normal = sstate.normal;
-    state.tangent = sstate.tangent_u[0];
-    state.bitangent = sstate.tangent_v[0];
-    state.texCoord = sstate.text_coords[0];
-    state.matID = sstate.matIndex;
-    state.ffnormal = dot(state.normal, incomingRay.direction) <= 0.0 ? state.normal : -state.normal;
-    return state;
 }
 
 bool Occlusion(Ray ray, State state, float dist) {
@@ -73,26 +60,6 @@ vec3 Eval(State state, vec3 V, vec3 N, vec3 L, inout float pdf) {
 
 vec3 Sample(State state, vec3 V, vec3 N, inout vec3 L, inout float pdf, inout RngStateType seed) {
      return metallicWorkflowSample(state, N, V, vec3(rand(seed), rand(seed), rand(seed)), L, pdf);
-}
-
-vec3 DebugInfo(in State state) {
-    switch (rtxState.debugging_mode) {
-    case eMetallic:
-        return vec3(state.mat.metallic);
-    case eNormal:
-        return (state.normal + vec3(1)) * .5;
-    case eDepth:
-        return vec3(0.0);
-    case eBaseColor:
-        return state.mat.albedo;
-    case eEmissive:
-        return state.mat.emission;
-    case eRoughness:
-        return vec3(state.mat.roughness);
-    case eTexcoord:
-        return vec3(state.texCoord, 0);
-    };
-    return vec3(1000, 0, 0);
 }
 
 vec3 EnvRadiance(vec3 dir) {
@@ -127,6 +94,22 @@ vec3 EnvEval(vec3 dir, out float pdf) {
         pdf = luminance(radiance) * rtxState.envMapLuminIntegInv * rtxState.environmentProb;
         return radiance;
     }
+}
+
+vec3 LightEval(State state, float dist, vec3 dir, out float pdf) {
+    float lightProb = (1.0 - rtxState.environmentProb);
+
+    GltfShadeMaterial mat = materials[state.matID];
+    vec3 emission = mat.emissiveFactor;
+
+    pdf = luminance(emission) * rtxState.lightLuminIntegInv * lightProb;
+    pdf *= dist * dist / absDot(state.ffnormal, dir);
+
+    if (mat.emissiveTexture > -1) {
+        vec2 uv = state.texCoord;
+        emission *= SRGBtoLINEAR(textureLod(texturesMap[nonuniformEXT(mat.emissiveTexture)], uv, 0)).rgb;
+    }
+    return emission / state.area;
 }
 
 vec2 SampleTriangleUniform(vec3 v0, vec3 v1, vec3 v2) {
@@ -200,10 +183,6 @@ float SamplePuncLight(vec3 x, out LightSample lightSample) {
     return light.impSamp.pdf;
 }
 
-/*
-* Sample direct light sources without occlusion test
-* Return float: pdf
-*/
 float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
     float rnd = rand(prd.seed);
     if (rnd < rtxState.environmentProb) {
@@ -265,7 +244,7 @@ vec3 DirectLight(State state, vec3 wo) { // importance sample on light sources
         max(dot(state.ffnormal, lightSample.wi), 0.0) / pdf;
 }
 
-
+/*
 bool UpdateSample(inout Ray r, in State state, in float screenDepth, inout vec3 radiance, inout vec3 throughput) {
     // Emissive material
     radiance += state.mat.emission * throughput;
@@ -365,7 +344,7 @@ bool UpdateSampleWithoutEmissionDirectLight(inout Ray r, in State state, inout v
 
 vec3 IndirectSample(Ray r, State state, float hitT) {
     prd.hitT = hitT;
-    vec3 radiance = /*state.mat.emission*/ vec3(0.0);
+    vec3 radiance = vec3(0.0);
     vec3 throughput = vec3(1.0);
 
     { // first intersection
@@ -390,7 +369,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
         }
 
         // Get Position, Normal,Texture Coordinates
-        state = GetState(r);
+        state = GetState(prd, r.direction);
 
         // Filling material structures
         GetMaterials(state, r);
@@ -425,7 +404,7 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
             }
 
             // Get Position, Normal, Texture Coordinates
-            state = GetState(r);
+            state = GetState(prd, r.direction);
 
             // Filling material structures
             GetMaterials(state, r);
@@ -445,15 +424,18 @@ vec3 IndirectSample(Ray r, State state, float hitT) {
 
     return radiance;
 }
+*/
 
-uvec4 encodeGeometryInfo(State state, float depth) {
-    uvec4 gInfo;
-    gInfo.x = floatBitsToUint(depth);
-    gInfo.y = compress_unit_vec(state.normal);
-    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
-    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0)) & 0xFFFFFF; //agbr
-    gInfo.w += hash8bit(state.matID);
-    return gInfo;
+vec3 clampRadiance(vec3 radiance) {
+    if (isnan(radiance.x) || isnan(radiance.y) || isnan(radiance.z)) {
+        return vec3(0.0);
+    }
+
+    float lum = luminance(radiance);
+    if (lum > rtxState.fireflyClampThreshold) {
+        radiance *= rtxState.fireflyClampThreshold / lum;
+    }
+    return radiance;
 }
 
 void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
@@ -461,425 +443,12 @@ void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
     normal = decompress_unit_vec(gInfo.y);
     depth = uintBitsToFloat(gInfo.x);
 }
+
 void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, out uint matHash) {
     uvec4 gInfo = imageLoad(lastGbuffer, imageCoords);
     normal = decompress_unit_vec(gInfo.y);
     depth = uintBitsToFloat(gInfo.x);
     matHash = gInfo.w & 0xFF000000;
-}
-
-vec3 PHat(Reservoir resv, State state, vec3 wo) {
-    return resv.lightSample.Li * Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf) *
-        abs(dot(state.ffnormal, resv.lightSample.wi));
-}
-
-float BigW(Reservoir resv, State state, vec3 wo) {
-    return resv.weight / (resvToScalar(PHat(resv, state, wo)) * float(resv.num));
-}
-
-bool findTemporalNeighbor(vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out Reservoir resv) {
-    int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
-
-    vec3 pnorm; float pdepth; uint matHash;
-    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
-
-    bool diff = false;
-    if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x || lastCoord.x < 0 || lastCoord.y >= rtxState.size.y) {
-        return false;
-    }
-    else if (hash8bit(matId) != matHash)
-        return false;
-    else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
-        return false;
-    }
-    // else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth) {
-    //     return false;
-    // }
-    resv = lastDirectResv[pidx];
-    return true;
-}
-
-/*
-* Assume temporally reused result is temporarily stored in tempDirectResv
-*/
-bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out Reservoir resv) {
-    const float Radius = 30.0;
-
-    vec2 p = toConcentricDisk(vec2(rand(prd.seed), rand(prd.seed)));
-    int px = int(float(imageCoords.x + p.x) + 0.5);
-    int py = int(float(imageCoords.y + p.y) + 0.5);
-    int pidx = py * rtxState.size.x + px;
-
-    vec3 pnorm; float pdepth;
-    loadLastGeometryInfo(imageCoords, pnorm, pdepth);
-
-    bool diff = false;
-    if (px < 0 || px >= rtxState.size.x || py < 0 || py >= rtxState.size.y) {
-        return false;
-    }
-    else if (dot(norm, pnorm) < 0.1 || abs(depth - pdepth) > depth * 0.1) {
-        return false;
-    }
-    resv = tempDirectResv[pidx];
-    return true;
-}
-
-bool mergeSpatialNeighbors(vec3 norm, float depth, uint matId, out Reservoir resv) {
-    bool valid = false;
-    resvReset(resv);
-    for (int i = 0; i < 5; i++) {
-        Reservoir spatial;
-        if (findSpatialNeighbor(norm, depth, matId, spatial)) {
-            if (!resvInvalid(spatial)) {
-                resvMerge(resv, spatial, rand(prd.seed));
-                valid = true;
-            }
-        }
-    }
-    return valid;
-}
-
-void saveNewReservoir(Reservoir resv) {
-    thisDirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
-}
-
-void cacheTempReservoir(Reservoir resv) {
-    tempDirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
-}
-
-vec2 createMotionVector(vec3 pos) {
-    vec4 proj = sceneCamera.lastProjView * vec4(pos, 1.0);
-    vec3 ndc = proj.xyz / proj.w;
-    return ndc.xy * 0.5 + 0.5;
-}
-
-ivec2 createMotionIndex(vec3 pos) {
-    //return min(ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)), rtxState.size - 1);
-    return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)) + 1;
-}
-
-vec3 DirectSample(Ray r) {
-    int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
-    uvec4 gInfo;
-    ClosestHit(r);
-    float depth = prd.hitT;
-    if (depth >= INFINITY) {
-
-        vec3 env;
-        if (_sunAndSky.in_use == 1) {
-            env = sun_and_sky(_sunAndSky, r.direction);
-        }
-        else {
-            vec2 uv = GetSphericalUv(r.direction);  // See sampling.glsl
-            env = texture(environmentTexture, uv).rgb;
-        }
-        // Done sampling return
-        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
-        imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
-        return (env * rtxState.hdrMultiplier);
-    }
-    State state = GetState(r);
-    // Filling material structures
-    GetMaterials(state, r);
-
-    ivec2 motionIdx = createMotionIndex(state.position);
-    imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
-
-    gInfo = encodeGeometryInfo(state, depth);
-    imageStore(thisGbuffer, imageCoords, gInfo);
-    barrier();
-
-    if (rtxState.debugging_mode > eIndirectStage) {
-        return DebugInfo(state);
-    }
-
-    if (state.isEmitter) {
-        return state.mat.emission;
-    }
-
-    vec3 wo = -r.direction;
-    vec3 direct = vec3(0.0);
-    vec3 albedo = state.mat.albedo;
-    state.mat.albedo = vec3(1.0);
-#ifndef DIRECT_ONLY
-    float directProb = min((state.mat.roughness - 0.001) * 2.0, 1.0);
-    bool directSampling = (rand(prd.seed) < directProb);
-    // directSampling = false;
-#else 
-    float directProb = 1.0;
-    bool directSampling = true;
-#endif
-    // no ris
-    if (rtxState.ReSTIRState == eNone) {
-        // importance sampling on brdf
-        if (!directSampling) {
-            Ray shadowRay;
-            BsdfSampleRec bsdfSampleRec;
-            bsdfSampleRec.f = Sample(state, -r.direction, state.ffnormal, bsdfSampleRec.L, bsdfSampleRec.pdf, prd.seed);
-
-            if (!IsPdfInvalid(bsdfSampleRec.pdf)) {
-                vec3 throughput = bsdfSampleRec.f * abs(dot(state.ffnormal, bsdfSampleRec.L)) / bsdfSampleRec.pdf;
-                shadowRay.direction = bsdfSampleRec.L;
-                shadowRay.origin = OffsetRay(state.position, dot(bsdfSampleRec.L, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-                ClosestHit(shadowRay);
-                if (prd.hitT >= INFINITY) {
-                    vec3 env;
-                    if (_sunAndSky.in_use == 1)
-                        env = sun_and_sky(_sunAndSky, shadowRay.direction);
-                    else {
-                        vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
-                        env = texture(environmentTexture, uv).rgb;
-                    }
-                    // Done sampling return
-                    direct = (env * rtxState.hdrMultiplier) * throughput;
-                }
-                else {
-                    State state2;
-                    ShadeState sstate = GetShadeState(prd);
-                    state2.matID = sstate.matIndex;
-                    state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
-                    GetMaterials(state2, shadowRay);
-
-                    direct = state2.mat.emission * throughput;
-                }
-            }
-            direct /= 1.0 - directProb;
-        }
-        // direct sampling
-        else {
-            direct = DirectLight(state, wo) / directProb;
-        }
-    }
-    else {
-        Reservoir resv;
-        resvReset(resv);
-        // importance sampling on brdf and store one sample into reservoir
-        if (!directSampling) {
-            Ray shadowRay;
-            resv.lightSample.Li = vec3(0.0);
-            float p;
-            vec3 bsdf = Sample(state, -r.direction, state.ffnormal, resv.lightSample.wi, p, prd.seed);
-            wo = -r.direction;
-            p *= 1.0 - directProb;
-            if (!IsPdfInvalid(p)) {
-                shadowRay.direction = resv.lightSample.wi;
-                shadowRay.origin = OffsetRay(state.position, dot(resv.lightSample.wi, state.ffnormal) > 0 ? state.ffnormal : -state.ffnormal);
-                ClosestHit(shadowRay);
-                resv.lightSample.dist = prd.hitT;
-                resv.num = 1;
-                if (prd.hitT >= INFINITY) {
-                    vec3 env;
-                    if (_sunAndSky.in_use == 1)
-                        env = sun_and_sky(_sunAndSky, shadowRay.direction);
-                    else {
-                        vec2 uv = GetSphericalUv(shadowRay.direction);  // See sampling.glsl
-                        env = texture(environmentTexture, uv).rgb;
-                    }
-                    resv.lightSample.Li = (env * rtxState.hdrMultiplier);
-                }
-                else {
-                    State state2;
-                    ShadeState sstate = GetShadeState(prd);
-                    state2.matID = sstate.matIndex;
-                    state2.ffnormal = dot(state2.normal, r.direction) <= 0.0 ? state2.normal : -state2.normal;
-                    GetMaterials(state2, shadowRay);
-
-                    resv.lightSample.Li = state2.mat.emission;
-                }
-                vec3 g = resv.lightSample.Li * bsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
-                resv.lightSample.pHat = resvToScalar(g);
-                resv.weight = resv.lightSample.pHat / p;
-                if (isnan(resv.weight)) { resv.weight = 0.0; resv.num = 0; }
-            }
-        }
-        // direct sampling with ris and store the sample into reservoir
-        else {
-            for (int i = 0; i < rtxState.RISSampleNum; i++) {
-                LightSample lsample;
-                float p = SampleDirectLightNoVisibility(state.position, lsample) * directProb;
-                float weight = 0.0;
-
-                if (!IsPdfInvalid(p)) {
-                    vec3 g = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * abs(dot(state.ffnormal, lsample.wi));
-                    lsample.pHat = resvToScalar(g);
-                    weight = lsample.pHat / p;
-                    if (isnan(weight)) weight = 0.0;
-                }
-                resvUpdate(resv, lsample, weight, rand(prd.seed));
-            }
-            LightSample lsample = resv.lightSample;
-            Ray shadowRay;
-            shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-            shadowRay.direction = lsample.wi;
-
-            if (Occlusion(shadowRay, state, lsample.dist)) {
-                resv.weight = 0.0;
-            }
-        }
-
-        //temproal reuse
-        if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
-            //float reprojDepth = length(vec3(sceneCamera.lastView * vec4(state.position, 1.0)));
-            float reprojDepth = length(sceneCamera.lastPosition - state.position);
-            Reservoir temporal;
-            
-            // if ((gl_GlobalInvocationID.x == motionIdx.x && gl_GlobalInvocationID.y == motionIdx.y) || state.mat.roughness > 0.2) {
-            if (findTemporalNeighbor(state.normal, depth, reprojDepth, state.matID, motionIdx, temporal)) {
-                if (!resvInvalid(temporal)) {
-                    //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
-                    resvMerge(resv, temporal, rand(prd.seed));
-                }
-            }
-        }
-
-        // store the reservoir before spatial reuse
-        resvCheckValidity(resv);
-        resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
-        saveNewReservoir(resv);
-
-        // spatial reuse
-        if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
-            Reservoir spatial;
-            resvReset(spatial);
-
-            barrier();
-            resvCheckValidity(resv);
-            cacheTempReservoir(resv);
-            barrier();
-
-            Reservoir spatialAggregate;
-            if (mergeSpatialNeighbors(state.normal, depth, state.matID, spatialAggregate)) {
-                if (!resvInvalid(spatialAggregate)) {
-                    resvMerge(spatial, spatialAggregate, rand(prd.seed));
-                }
-            }
-            barrier();
-            resvCheckValidity(resv);
-            cacheTempReservoir(resv);
-            barrier();
-
-            if (mergeSpatialNeighbors(state.normal, depth, state.matID, spatialAggregate)) {
-                if (!resvInvalid(spatialAggregate)) {
-                    resvMerge(spatial, spatialAggregate, rand(prd.seed));
-                }
-            }
-
-            if (!resvInvalid(spatial)) {
-                //resvClamp(spatial, 128);
-                resvMerge(resv, spatial, rand(prd.seed));
-            }
-        }
-
-        if (!resvInvalid(resv)) {
-            vec3 LiBsdf = Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf);
-            direct = resv.lightSample.Li * LiBsdf * abs(dot(state.ffnormal, resv.lightSample.wi));
-            direct = direct / resv.lightSample.pHat * resv.weight / float(resv.num);
-            // direct = LiBsdf;
-        }
-    }
-
-    if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
-        direct = vec3(0.0);
-    }
-    // direct = vec3(vec2(motionIdx) / vec2(rtxState.size), 0);
-    return state.mat.emission + direct * albedo;
-    // return direct;
-}
-
-float MIS(float f, float g) {
-    return (rtxState.MIS > 0) ? powerHeuristic(f, g) : 0.5;
-}
-
-vec3 PathTraceReSTIRGI(Ray ray) {
-    int index = imageCoords.y * rtxState.size.x + imageCoords.x;
-    ClosestHit(ray);
-
-    if (prd.hitT >= INFINITY) {
-        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
-        imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
-        return EnvRadiance(ray.direction);
-    }
-    // Get intersection point info: geometry and material
-    State state = GetState(ray);
-    GetMaterials(state, ray);
-
-    // Write motion vector and G-buffer
-    ivec2 motionIdx = createMotionIndex(state.position);
-    uvec4 gInfo = encodeGeometryInfo(state, prd.hitT);
-    imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
-    imageStore(thisGbuffer, imageCoords, gInfo);
-    barrier();
-
-    if (rtxState.debugging_mode > eIndirectStage) {
-        return DebugInfo(state);
-    }
-
-    if (state.isEmitter) {
-        return state.mat.emission;
-    }
-
-    vec3 radiance = vec3(0.0);
-    vec3 throughput = vec3(1.0);
-    float primSamplePdf;
-    bool primSampleDelta;
-    vec3 primWo = -ray.direction;
-    //Material primMaterial = state.mat;
-
-    for (int depth = 1; depth <= rtxState.maxDepth; depth++) {
-        vec3 wo = -ray.direction;
-        {
-            vec3 Li;
-            vec3 wi;
-            float lightPdf = SampleDirectLight(state, Li, wi);
-
-            if (!IsPdfInvalid(lightPdf)) {
-                float BSDFPdf = Pdf(state, wo, state.ffnormal, wi);
-                float weight = MIS(lightPdf, BSDFPdf);
-                radiance += Li * BSDF(state, wo, state.ffnormal, wi) * absDot(state.ffnormal, wi) *
-                    throughput / lightPdf * weight;
-            }
-        }
-
-        vec3 sampleWi;
-        float samplePdf;
-        vec3 sampleBSDF = Sample(state, wo, state.ffnormal, sampleWi, samplePdf, prd.seed);
-
-        if (IsPdfInvalid(samplePdf) || samplePdf < 1e-8) {
-            break;
-        }
-
-        throughput *= sampleBSDF / samplePdf * absDot(state.ffnormal, sampleWi);
-
-        ray.origin = OffsetRay(state.position, state.ffnormal);
-        ray.direction = sampleWi;
-
-        vec3 curPos = state.position;
-        ClosestHit(ray);
-
-        if (prd.hitT >= INFINITY) {
-            float lightPdf;
-            vec3 Li = EnvEval(sampleWi, lightPdf);
-            float weight = MIS(samplePdf, lightPdf);
-            radiance += Li * throughput * weight;
-            break;
-        }
-
-        state = GetState(ray);
-        GetMaterials(state, ray);
-
-#ifdef RR
-        float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
-        if (rand(prd.seed) >= rrPcont) {
-            break;
-        }
-        throughput /= rrPcont;
-#endif
-    }
-
-    if (isnan(radiance.x) || isnan(radiance.y) || isnan(radiance.z)) {
-        radiance = vec3(0.0);
-    }
-    return radiance;
 }
 
 //-----------------------------------------------------------------------
@@ -909,4 +478,24 @@ Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
     // vec3 finalRayDir = normalize(focalPoint - randomAperturePos);
 
     return Ray(origin.xyz, /*finalRayDir*/ direction.xyz);
+}
+
+vec3 DebugInfo(in State state) {
+    switch (rtxState.debugging_mode) {
+    case eMetallic:
+        return vec3(state.mat.metallic);
+    case eNormal:
+        return (state.normal + vec3(1)) * .5;
+    case eDepth:
+        return vec3(0.0);
+    case eBaseColor:
+        return state.mat.albedo;
+    case eEmissive:
+        return state.mat.emission;
+    case eRoughness:
+        return vec3(state.mat.roughness);
+    case eTexcoord:
+        return vec3(state.texCoord, 0);
+    };
+    return vec3(1000, 0, 0);
 }

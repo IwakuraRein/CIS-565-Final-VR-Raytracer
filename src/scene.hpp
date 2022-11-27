@@ -78,6 +78,9 @@ public:
 	const std::vector<nvvk::Buffer>& getBuffers(EBuffers b) { return m_buffers[b]; }
 	const std::string& getSceneName() const { return m_sceneName; }
 	SceneCamera& getCamera() { return m_camera; }
+
+	float m_puncLightWeight{ 0.f };
+	float m_trigLightWeight{ 0.f };
 private:
 	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
 	void createDescriptorSet(const nvh::GltfScene& gltf);
@@ -108,7 +111,6 @@ private:
 
 	// Direct light importance sampling
 	LightBufInfo m_lightBufInfo;
-	float m_puncLightWeight{ 0.f }, m_trigLightWeight{ 0.f };
 	float createPuncLightImptSampAccel(std::vector<PuncLight>& puncLights, const nvh::GltfScene& gltf);
 	float createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
 	float computeTrigIntensity(const TrigLight& trig, const nvh::GltfMaterial& mtl, const tinygltf::Model& gltfModel);

@@ -88,7 +88,8 @@ vec3 metallicWorkflowBSDF(State state, vec3 n, vec3 wo, vec3 wi) {
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
 
-    float alpha = roughness * roughness;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
     vec3 h = normalize(wo + wi);
 
     float cosO = dot(n, wo);
@@ -108,7 +109,8 @@ float metallicWorkflowPdf(State state, vec3 n, vec3 wo, vec3 wi) {
     vec3 baseColor = state.mat.albedo;
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
-    float alpha = roughness * roughness;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
 
     vec3 h = normalize(wo + wi);
     return mix(
@@ -123,8 +125,8 @@ vec3 metallicWorkflowEval(State state, vec3 n, vec3 wo, vec3 wi, out float pdf) 
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
 
-    float alpha = roughness * roughness;
-    // float alpha = roughness;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
     vec3 h = normalize(wo + wi);
 
     float cosO = dot(n, wo);
@@ -144,8 +146,8 @@ vec3 metallicWorkflowEval(State state, vec3 n, vec3 wo, vec3 wi, out float pdf) 
 float metallicWorkflowSample(State state, vec3 n, vec3 wo, vec3 r, out vec3 bsdf, out vec3 dir) {
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
-    float alpha = roughness * roughness;
-    // float alpha = roughness;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
 
     if (r.z > (1.0 / (2.0 - metallic))) {
         dir = sampleHemisphereCosine(n, r.xy);
