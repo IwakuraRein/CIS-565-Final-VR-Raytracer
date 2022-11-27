@@ -59,8 +59,6 @@ ivec2 imageCoords;
 
 #define FIREFLIES 1
 
-//--------------------------------------------------------------------------------------------------
-//--------------------------------------------------------------------------------------------------
 #ifndef SWIZZLED
 layout(local_size_x = 8, local_size_y = 8) in;
 #else
@@ -78,15 +76,10 @@ ivec2 SampleSizzled() {
 }
 #endif
 
-//
-//--------------------------------------------------------------------------------------------------
-//
-//
-
 bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
   depth = uintBitsToFloat(gInfo.x);
-  if(depth >= INFINITY)
+  if(depth >= INFINITY - EPS * 10.0)
     return false;
   state.position = ray.origin + ray.direction * depth;
   state.normal = decompress_unit_vec(gInfo.y);
@@ -99,52 +92,227 @@ bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   state.mat.roughness = matInfo.y;
   state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
   state.mat.transmission = matInfo.w;
+  state.matID = gInfo.w >> 24;
   return true;
 }
 
-void main() {
-  // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
+float MIS(float f, float g) {
+    return (rtxState.MIS > 0) ? powerHeuristic(f, g) : 1.0;
+}
 
-  ivec2 imageRes = rtxState.size;
-  /*ivec2*/ imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
-
-  // Initialize the seed for the random number only once once
-  // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
-  // prd.seed = s.x + s.y;
-  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
-
-  // the seed should be the same as direct stage cause they are using the same push constant value
-  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
-  //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
-
-  vec3 pixelColor = vec3(0);
-  float depth;
-  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-
-    State state;
-    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-
-    if(!getStateFromGbuffer(ray, state, depth))
-      break;
-
-    vec3 radiance = IndirectSample(ray, state, depth);
-
-    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold) {
-      radiance *= rtxState.fireflyClampThreshold / lum;
+bool findTemporalNeighbor(
+    vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out IndirectReservoir resv
+) {
+    if (lastCoord.x < 0 || lastCoord.x >= rtxState.size.x ||
+        lastCoord.y < 0 || lastCoord.y >= rtxState.size.y) {
+        return false;
     }
-    pixelColor += radiance;
-  }
-  pixelColor /= rtxState.spp;
+    int pidx = lastCoord.y * rtxState.size.x + lastCoord.x;
 
-  // Saving pixel color
+    vec3 pnorm; float pdepth; uint matHash;
+    loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
+
+    if (hash8bit(matId) != matHash) {
+        return false;
+    }
+    else if (dot(norm, pnorm) < 0.9 || reprojDepth > pdepth * 1.05) {
+        return false;
+    }
+    resv = lastIndirectResv[pidx];
+    return true;
+}
+
+vec3 pHatIndirect(GISample giSample, State state, vec3 wo) {
+    return giSample.L;
+
+    vec3 wi = normalize(giSample.xs - giSample.xv);
+    return giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi);
+}
+
+float bigWIndirect(IndirectReservoir resv, State state, vec3 wo) {
+    return resv.weight / (resvToScalar(pHatIndirect(resv.giSample, state, wo)) * float(resv.num));
+}
+
+GISample newGISample() {
+    GISample giSample;
+    giSample.nv = vec3(100.0);
+    giSample.L = vec3(0.0);
+    return giSample;
+}
+
+bool GISampleValid(GISample giSample) {
+    return giSample.nv.x < 1.1 && !hasNan(giSample.L);
+}
+
+vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
+    int index = imageCoords.y * rtxState.size.x + imageCoords.x;
+
+    vec3 throughput = vec3(1.0);
+    float primSamplePdf;
+    vec3 primWo = -ray.direction;
+    State primState = state;
+
+    GISample giSample = newGISample();
+
+    for (int depth = 1; depth <= rtxState.maxDepth; depth++) {
+        vec3 wo = -ray.direction;
+
+        if (depth > 1) {
+            vec3 Li, wi;
+            float lightPdf = SampleDirectLight(state, Li, wi);
+
+            if (!IsPdfInvalid(lightPdf)) {
+                float BSDFPdf = Pdf(state, wo, state.ffnormal, wi);
+                float weight = MIS(lightPdf, BSDFPdf);
+                giSample.L += Li * BSDF(state, wo, state.ffnormal, wi) * absDot(state.ffnormal, wi) *
+                    throughput / lightPdf * weight;
+            }
+        }
+
+        vec3 sampleWi;
+        float samplePdf;
+        vec3 sampleBSDF = Sample(state, wo, state.ffnormal, sampleWi, samplePdf, prd.seed);
+
+        if (IsPdfInvalid(samplePdf) || samplePdf < 1e-8) {
+            break;
+        }
+
+        if (depth > 1) {
+            throughput *= sampleBSDF / samplePdf * absDot(state.ffnormal, sampleWi);
+        }
+        else {
+            primSamplePdf = samplePdf;
+            giSample.xv = state.position;
+            giSample.nv = state.ffnormal;
+        }
+
+        ray.origin = OffsetRay(state.position, state.ffnormal);
+        ray.direction = sampleWi;
+
+        ClosestHit(ray);
+
+        if (prd.hitT >= INFINITY - 1e-4) {
+            float lightPdf;
+            vec3 Li = EnvEval(sampleWi, lightPdf);
+            float weight = MIS(samplePdf, lightPdf);
+            giSample.L += Li * throughput * weight;
+
+            if (depth == 1) {
+                // Hack here. To let samples from the infinity light able to be temporally reused
+                giSample.xs = state.position + sampleWi * INFINITY * 0.8;
+                giSample.ns = -sampleWi;
+            }
+            break;
+        }
+
+        state = GetState(prd, ray.direction);
+        GetMaterials(state, ray);
+
+        if (state.isEmitter) {
+            float lightPdf;
+            vec3 Li = LightEval(state, prd.hitT, sampleWi, lightPdf);
+            float weight = MIS(samplePdf, lightPdf);
+            giSample.L += Li * throughput * weight;
+
+            if (depth == 1) {
+                giSample.xs = state.position;
+                giSample.ns = state.ffnormal;
+            }
+            break;
+            return giSample.L;
+        }
+
+        if (depth == 1) {
+            giSample.xs = state.position;
+            giSample.ns = state.ffnormal;
+        }
+
+#ifdef RR
+        float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
+        if (rand(prd.seed) >= rrPcont) {
+            break;
+        }
+        throughput /= rrPcont;
+#endif
+    }
+
+    IndirectReservoir resv;
+    resvReset(resv);
+
+    float sampleWeight = 0.0;
+    if (GISampleValid(giSample)) {
+        sampleWeight = resvToScalar(pHatIndirect(giSample, primState, primWo) / primSamplePdf);
+        if (isnan(sampleWeight) || sampleWeight < 0.0) {
+            sampleWeight = 0.0;
+        }
+    }
+    resvUpdate(resv, giSample, sampleWeight, rand(prd.seed));
+
+    if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
+        IndirectReservoir temporal;
+        resvReset(temporal);
+        float reprojDepth = length(sceneCamera.lastPosition - primState.position);
+        ivec2 motionIdx = imageLoad(motionVector, imageCoords).xy;
+
+        if (findTemporalNeighbor(primState.ffnormal, dist, reprojDepth, primState.matID, motionIdx, temporal)) {
+            if (!resvInvalid(temporal)) {
+                resvMerge(resv, temporal, rand(prd.seed));
+            }
+        }
+    }
+    vec3 indirect = vec3(0.0);
+
+    resvClamp(resv, rtxState.reservoirClamp);
+    giSample = resv.giSample;
+
+    if (!resvInvalid(resv) && GISampleValid(giSample)) {
+        vec3 primWi = normalize(giSample.xs - giSample.xv);
+        /*
+        indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi) * satDot(giSample.nv, primWi) *
+            bigWIndirect(resv, primState, primWo);
+            */
+        indirect = giSample.L / resvToScalar(giSample.L) * resv.weight / float(resv.num);
+        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
+    }
+
+    if (hasNan(indirect)) {
+        indirect = vec3(0.0);
+    }
+    thisIndirectResv[index] = resv;
+    return indirect;
+}
+
+void main() {
+  ivec2 imageRes = rtxState.size;
+  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  if (imageCoords.x >= imageRes.x || imageCoords.y >= imageRes.y) {
+    return;
+  }
+
+  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
+  Ray ray = raySpawn(imageCoords, imageRes);
+
+  State state;
+  float depth;
+  if (!getStateFromGbuffer(ray, state, depth)) {
+    imageStore(thisIndirectResultImage, imageCoords, vec4(0.0));
+    return;
+  }
+  //state.position = OffsetRay(state.position, state.ffnormal);
+
+  vec3 pixelColor = ReSTIRIndirect(state, ray, depth);
+  pixelColor = clampRadiance(pixelColor);
+
   if(rtxState.frame > 0) {
-    // Do accumulation over time    
     vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 0));
+    if (rtxState.accumulate != 0) {
+      imageStore(thisIndirectResultImage, imageCoords, vec4(new_result, 1));
+    }
+    else {
+      imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 1.0));
+    }
   } else {
-    // First frame, replace the value in the buffer
     imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 0));
   }
 }

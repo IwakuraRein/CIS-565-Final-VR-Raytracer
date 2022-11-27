@@ -134,5 +134,4 @@ vec4 EnvSample(inout vec3 radiance)
   return vec4(lightDir, pdf);
 }
 
-
 #endif  // ENV_SAMPLING_GLSL

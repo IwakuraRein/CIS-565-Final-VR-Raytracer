@@ -88,7 +88,8 @@ vec3 metallicWorkflowBSDF(State state, vec3 n, vec3 wo, vec3 wi) {
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
 
-    float alpha = roughness * roughness;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
     vec3 h = normalize(wo + wi);
 
     float cosO = dot(n, wo);
@@ -108,11 +109,13 @@ float metallicWorkflowPdf(State state, vec3 n, vec3 wo, vec3 wi) {
     vec3 baseColor = state.mat.albedo;
     float roughness = state.mat.roughness;
     float metallic = state.mat.metallic;
+    //float alpha = roughness * roughness;
+    float alpha = roughness;
 
     vec3 h = normalize(wo + wi);
     return mix(
         satDot(n, wi) * PiInv,
-        GTR2Pdf(n, h, wo, roughness * roughness) / (4.0 * absDot(h, wo)),
+        GTR2Pdf(n, h, wo, alpha) / (4.0 * absDot(h, wo)),
         1.0 / (2.0 - metallic)
     );
 }

@@ -24,7 +24,7 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-//#define DIRECT_ONLY
+#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -96,14 +96,13 @@ END_ENUM();
 START_ENUM(RayQBindings)
 eLastGbuffer = 0,
 eThisGbuffer = 1,
-//eLastDirectCache = 2,
-//eLastIndirectCache = 3,
-//eThisDirectCache = 4,
-//eThisIndirectCache = 5,
 eLastDirectResv = 2,
 eThisDirectResv = 3,
 eTempDirectResv = 4,
-eMotionVector = 5
+eLastIndirectResv = 5,
+eThisIndirectResv = 6,
+eTempIndirectResv = 7,
+eMotionVector = 8
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -203,6 +202,9 @@ struct RtxState
 	int accumulate;
 
 	ivec2 size;		// rendering size
+	float envMapLuminIntegInv;
+	float lightLuminIntegInv;
+	int MIS;
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -225,16 +227,28 @@ const int LightType_Spot = 2;
 const int LightType_Triangle = 3;
 
 // ReSTIR
-struct LightSample{
+struct LightSample {
 	vec3 Li;
 	vec3 wi;
 	float dist;
 	float pHat;
 };
 
-struct Reservoir {
+struct GISample {
+	vec3 L;
+	vec3 xv, nv;
+	vec3 xs, ns;
+};
+
+struct DirectReservoir {
 	LightSample lightSample;
 	uint num;
+	float weight;
+};
+
+struct IndirectReservoir {
+	GISample giSample;
+	uint	 num;
 	float weight;
 };
 

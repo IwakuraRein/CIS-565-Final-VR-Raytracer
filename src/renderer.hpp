@@ -57,6 +57,7 @@ public:
   void createBuffer();
   void createImage();
   void createDescriptorSet();
+  void updateDescriptorSet();
 
 private:
   uint32_t m_nbHit{0};
@@ -72,10 +73,12 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
-  //std::array<nvvk::Texture, 2> m_directCache;
-  //std::array<nvvk::Texture, 2> m_indirectCache;
+
   std::array<nvvk::Buffer, 2> m_directReservoir;
-  nvvk::Buffer m_directResvTemp;
+  std::array<nvvk::Buffer, 2> m_indirectReservoir;
+  nvvk::Buffer m_directTempResv;
+  nvvk::Buffer m_indirectTempResv;
+
   // Depth 32bit, Normal 32bit, Metallic 8bit, Roughness 8bit, IOR 8bit, Transmission 8bit, Albedo 24bit, Hashed Material ID 8bit
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
 
