@@ -153,17 +153,17 @@ public:
 
 	RtxState m_rtxState{
 		0,       // frame;
-		2,       // maxDepth;
+		4,       // maxDepth;
 		1,       // samples per pixel;
 		1,       // fireflyClampThreshold;
 
 		1,       // hdrMultiplier;
 		0,       // debugging_mode;
-		0.25f,  //environmentProb
-		0,   //time
+		0.25f,   //environmentProb
+		0,       //time
 
-		0,
-		16,
+		2,       // ReSTIRState
+		4,       // RISSampleNum
 		80,      // clamp
 		0,       // accumulate
 

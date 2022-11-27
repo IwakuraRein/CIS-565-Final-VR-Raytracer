@@ -24,7 +24,6 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -122,11 +121,10 @@ END_ENUM();
 // clang-format on
 
 START_ENUM(ReSTIRState)
-eNone = 0,
-eRIS = 1,
-eSpatial = 2,
-eTemporal = 3,
-eSpatiotemporal = 4
+eRIS = 0,
+eSpatial = 1,
+eTemporal = 2,
+eSpatiotemporal = 3
 END_ENUM();
 
 // Camera of the scene
