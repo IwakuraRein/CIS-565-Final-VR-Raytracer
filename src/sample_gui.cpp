@@ -351,7 +351,9 @@ bool SampleGUI::guiStatistics()
 	if (stats.nbMeshes > 0)
 		GuiH::Info("Meshes", "", FormatNumbers(stats.nbMeshes));
 	if (stats.nbLights > 0)
-		GuiH::Info("Lights", "", FormatNumbers(stats.nbLights));
+		GuiH::Info("punct Lights", "", FormatNumbers(stats.nbLights));
+	if (_se->m_scene.nAreaLights > 0)
+		GuiH::Info("area Lights", "", FormatNumbers(_se->m_scene.nAreaLights));
 	if (stats.nbTriangles > 0)
 		GuiH::Info("Triangles", "", FormatNumbers(stats.nbTriangles));
 	if (stats.nbUniqueTriangles > 0)

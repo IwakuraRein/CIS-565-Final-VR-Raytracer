@@ -81,6 +81,7 @@ public:
 
 	float m_puncLightWeight{ 0.f };
 	float m_trigLightWeight{ 0.f };
+	size_t nAreaLights{ 0 };
 private:
 	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
 	void createDescriptorSet(const nvh::GltfScene& gltf);

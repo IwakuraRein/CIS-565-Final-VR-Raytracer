@@ -43,6 +43,8 @@ struct MilliTimer : public nvh::Stopwatch
   void print() { LOGI(" --> (%5.3f ms)\n", elapsed()); }
 };
 
+#define gigo 1000000000.0f
+#define mego 1000000.0f
 
 // Formating with local number representation
 template <class T>
@@ -50,7 +52,46 @@ std::string FormatNumbers(T value)
 {
   std::stringstream ss;
   ss.imbue(std::locale(""));
-  ss << std::fixed << value;
+  //tigra: only integer - format it to kilo, mega, giga
+  
+  if(value > 10005) {	  
+			float num, conv_num;
+			char kb_mega_giga, str[30];
+			
+			num = (float) value;
+			
+			conv_num = num;
+			kb_mega_giga = '\0';
+			if(num >= gigo)
+			{
+				kb_mega_giga = 'G';
+				conv_num = float(num) / gigo;
+			}
+			else
+			if(num >= mego)
+			{
+				kb_mega_giga = 'm';
+				conv_num = float(num) / mego;
+			}
+			else
+			if(num >= 1000.0f)
+			{
+				kb_mega_giga = 'k';
+				conv_num = float(num) / 1000.0f;
+			}
+			
+			sprintf(str, "%.2f%c", conv_num, kb_mega_giga);
+	
+			/*
+			ss << str << " (";			
+			ss << std::fixed << value << ")";
+			*/
+			
+			return str;
+  } else {	  
+	ss << std::fixed << value;
+  }
+  
   return ss.str();
 }
 
