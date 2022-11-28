@@ -124,23 +124,23 @@ bool findTemporalNeighbor(
             }
         }
     }
-    for (int i = -1; i <= 1; i++) {
-        for (int j = -1; j <= 1; j++) {
-            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
-            loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
-            if (coord.x < 0 || coord.x >= rtxState.size.x ||
-                coord.y < 0 || coord.y >= rtxState.size.y) {
-                continue;
-            }
-            else if (hash8bit(matId) != matHash)
-                continue;
-            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
-                continue;
-            }
-            resv = lastIndirectResv[coord.y * rtxState.size.x + coord.x];
-            return true;
-        }
-    }
+    // for (int i = -1; i <= 1; i++) {
+    //     for (int j = -1; j <= 1; j++) {
+    //         ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
+    //         loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
+    //         if (coord.x < 0 || coord.x >= rtxState.size.x ||
+    //             coord.y < 0 || coord.y >= rtxState.size.y) {
+    //             continue;
+    //         }
+    //         else if (hash8bit(matId) != matHash)
+    //             continue;
+    //         else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+    //             continue;
+    //         }
+    //         resv = lastIndirectResv[coord.y * rtxState.size.x + coord.x];
+    //         return true;
+    //     }
+    // }
     return false;
 }
 bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out IndirectReservoir resv) {
@@ -181,10 +181,10 @@ bool mergeSpatialNeighbors(vec3 norm, float depth, uint matId, out IndirectReser
 }
 
 float pHatIndirect(GISample giSample, State state, vec3 wo) {
-    //return resvToScalar(giSample.L);
+    return resvToScalar(giSample.L);
 
     vec3 wi = normalize(giSample.xs - giSample.xv);
-    return resvToScalar(giSample.L * BSDF(state, wo, state.ffnormal, wi));// * satDot(giSample.nv, wi));
+    return resvToScalar(giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi));
 }
 
 float bigWIndirect(IndirectReservoir resv, State state, vec3 wo) {
@@ -327,8 +327,6 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
     }
     resvUpdate(resv, giSample, sampleWeight, rand(prd.seed));
 
-    IndirectReservoir thisResv = resv;
-
     // temporal reuse
     if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
         float reprojDepth = length(sceneCamera.lastPosition - primState.position);
@@ -346,10 +344,44 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
 
     // store the reservoir before spatial reuse
     resvCheckValidity(resv);
+    resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
+    saveNewReservoir(resv);
+
+    // spatial reuse
+    if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
+        IndirectReservoir spatial;
+        resvReset(spatial);
+
+        barrier();
+        cacheTempReservoir(resv);
+        barrier();
+
+        IndirectReservoir spatialAggregate;
+        if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
+            if (!resvInvalid(spatialAggregate)) {
+                resvMerge(spatial, spatialAggregate, rand(prd.seed));
+            }
+        }
+        barrier();
+        resvCheckValidity(resv);
+        cacheTempReservoir(resv);
+        barrier();
+
+        if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
+            if (!resvInvalid(spatialAggregate)) {
+                resvMerge(spatial, spatialAggregate, rand(prd.seed));
+            }
+        }
+
+        if (!resvInvalid(spatial)) {
+            //resvClamp(spatial, 128);
+            resvMerge(resv, spatial, rand(prd.seed));
+        }
+    }
 
     giSample = resv.giSample;
-    vec3 primWi = normalize(giSample.xs - primState.position);
     if (!resvInvalid(resv) && GISampleValid(giSample)) {
+        vec3 primWi = normalize(giSample.xs - giSample.xv);
         /*
         indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi) * satDot(giSample.nv, primWi) *
             bigWIndirect(resv, primState, primWo);
@@ -366,57 +398,14 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         //     state.mat.transmission = matInfo.w;
         //     giSample.L *= BSDF(state, -primWi, state.ffnormal, giSample.ws) * absDot(giSample.ns, giSample.ws);
         // }
-        indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi);
-        float tmp = resvToScalar(indirect);
-        if(!resvInvalid(thisResv) &&
-            ((abs(tmp - giSample.pHat) > 1) || tmp < 0.05)) {
-            saveNewReservoir(thisResv);
-        } else
-            saveNewReservoir(resv);
-        resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
-        saveNewReservoir(resv);
-        indirect *= absDot(giSample.nv, primWi);
-        indirect = indirect / tmp * resv.weight / float(resv.num);
+        indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
+        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
     }
-    else saveNewReservoir(thisResv);
-
 
     if (hasNan(indirect)) {
         indirect = vec3(0.0);
     }
     return indirect;
-
-    // spatial reuse
-    // if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
-    //     IndirectReservoir spatial;
-    //     resvReset(spatial);
-
-    //     barrier();
-    //     cacheTempReservoir(resv);
-    //     barrier();
-
-    //     IndirectReservoir spatialAggregate;
-    //     if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
-    //         if (!resvInvalid(spatialAggregate)) {
-    //             resvMerge(spatial, spatialAggregate, rand(prd.seed));
-    //         }
-    //     }
-    //     barrier();
-    //     resvCheckValidity(resv);
-    //     cacheTempReservoir(resv);
-    //     barrier();
-
-    //     if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
-    //         if (!resvInvalid(spatialAggregate)) {
-    //             resvMerge(spatial, spatialAggregate, rand(prd.seed));
-    //         }
-    //     }
-
-    //     if (!resvInvalid(spatial)) {
-    //         //resvClamp(spatial, 128);
-    //         resvMerge(resv, spatial, rand(prd.seed));
-    //     }
-    // }
 }
 
 void main() {
