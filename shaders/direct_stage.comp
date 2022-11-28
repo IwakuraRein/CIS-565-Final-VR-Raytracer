@@ -182,13 +182,13 @@ ivec2 createMotionIndex(vec3 pos) {
     return ivec2(createMotionVector(pos) * vec2(rtxState.size - 1)) + 1;
 }
 
-vec3 PHatDirect(DirectReservoir resv, State state, vec3 wo) {
-    return resv.lightSample.Li * Eval(state, wo, state.ffnormal, resv.lightSample.wi, dummyPdf) *
-        abs(dot(state.ffnormal, resv.lightSample.wi));
+float PHatDirect(DirectReservoir resv, State state, vec3 wo) {
+    return resvToScalar(resv.lightSample.Li * BSDF(state, wo, state.ffnormal, resv.lightSample.wi) *
+        abs(dot(state.ffnormal, resv.lightSample.wi)));
 }
 
 float BigWDirect(DirectReservoir resv, State state, vec3 wo) {
-    return resv.weight / (resvToScalar(PHatDirect(resv, state, wo)) * float(resv.num));
+    return resv.weight / (PHatDirect(resv, state, wo) * float(resv.num));
 }
 
 vec3 DirectSample(Ray r) {
@@ -248,6 +248,7 @@ vec3 DirectSample(Ray r) {
     if (!directSampling) {
         Ray shadowRay;
         resv.lightSample.Li = vec3(0.0);
+        resv.lightSample.pHat = 0.0;
         float p;
         vec3 bsdf = Sample(state, -r.direction, state.ffnormal, resv.lightSample.wi, p, prd.seed);
         wo = -r.direction;
@@ -287,6 +288,7 @@ vec3 DirectSample(Ray r) {
     else {
         for (int i = 0; i < rtxState.RISSampleNum; i++) {
             LightSample lsample;
+            lsample.pHat = 0.0;
             float p = SampleDirectLightNoVisibility(state.position, lsample) * directProb;
             float weight = 0.0;
 
@@ -298,12 +300,11 @@ vec3 DirectSample(Ray r) {
             }
             resvUpdate(resv, lsample, weight, rand(prd.seed));
         }
-        LightSample lsample = resv.lightSample;
         Ray shadowRay;
         shadowRay.origin = OffsetRay(state.position, state.ffnormal);
-        shadowRay.direction = lsample.wi;
+        shadowRay.direction = resv.lightSample.wi;
 
-        if (Occlusion(shadowRay, state, lsample.dist)) {
+        if (Occlusion(shadowRay, state, resv.lightSample.dist)) {
             resv.weight = 0.0;
         }
     }
@@ -320,21 +321,27 @@ vec3 DirectSample(Ray r) {
         if (findTemporalNeighbor(state.normal, depth, reprojDepth, state.matID, motionIdx, temporal)) {
             if (!resvInvalid(temporal)) {
                 //resvPreClampedMerge20(resv, temporal, rand(prd.seed));
-                resvMerge(resv, temporal, rand(prd.seed));
+                if (resvInvalid(thisResv) || (abs(PHatDirect(thisResv, state, wo) - resv.lightSample.pHat) < 1))
+                    resvMerge(resv, temporal, rand(prd.seed));
             }
         }
     }
 
-    resvCheckValidity(resv);
-    resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
+    // resvCheckValidity(resv);
+    // resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
 
     if (!resvInvalid(resv)) {
         vec3 LiBsdf = BSDF(state, wo, state.ffnormal, resv.lightSample.wi) * absDot(state.ffnormal, resv.lightSample.wi);
         direct = resv.lightSample.Li * LiBsdf;
     }
+
+    resvCheckValidity(resv);
+    resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
     
-    // remove bias
-    if (!resvInvalid(thisResv) && (abs(resvToScalar(direct) - resv.lightSample.pHat) > 0.1)) {
+    //remove bias
+    if (!resvInvalid(thisResv) && 
+        ((abs(resvToScalar(direct) - resv.lightSample.pHat) > 0.1) || 
+        resv.lightSample.pHat < 0.1)) {
         saveNewReservoir(thisResv);
     }
     else saveNewReservoir(resv);
