@@ -382,8 +382,6 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         saveNewReservoir(thisResv);
     }
     else saveNewReservoir(resv);
-        
-    saveNewReservoir(resv);
     
     indirect = indirect / giSample.pHat * resv.weight / float(resv.num);
 
