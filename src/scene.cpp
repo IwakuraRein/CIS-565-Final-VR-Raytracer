@@ -406,6 +406,8 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	NAME_VK(m_buffer[eTrigLights].buffer);
 	// m_buffer[eTrigLightTransforms] = m_pAlloc->createBuffer(cmdBuf, transforms, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 	// NAME_VK(m_buffer[eTrigLightTransforms].buffer);
+	
+	nAreaLights = m_lightBufInfo.trigLightSize;
 }
 
 //--------------------------------------------------------------------------------------------------
