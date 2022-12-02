@@ -66,7 +66,7 @@ public:
 	void setCameraFromScene(const std::string& filename, const nvh::GltfScene& gltf);
 	bool loadGltfScene(const std::string& filename, tinygltf::Model& tmodel);
 	void createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
-	void createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
+	void createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
 	void createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
 	void createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
 	void destroy();

@@ -97,6 +97,7 @@ bool Scene::load(const std::string& filename)
 	createVertexBuffer(cmdBuf, gltf);
 	createInstanceDataBuffer(cmdBuf, gltf);
 	createTrigLightBuffer(cmdBuf, gltf, tmodel);
+	createAabbBuffer(cmdBuf, gltf, tmodel);
 
 	// light buffer info buffer
 	if (m_lightBufInfo.puncLightSize > 0 || m_lightBufInfo.trigLightSize > 0)
@@ -352,7 +353,7 @@ void Scene::createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	NAME_VK(m_buffer[ePuncLights].buffer);
 }
 
-void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene)
+void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, const tinygltf::Model& gltfModel)
 {
 
 	for (const auto& node : gltfScene.m_nodes)
@@ -360,16 +361,22 @@ void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfS
 		const auto& mesh = gltfScene.m_primMeshes[node.primMesh];
 		nvh::GltfMaterial mat = gltfScene.m_materials[mesh.materialIndex];
 		if (mat.displacement.displacementGeometryTexture == -1) continue;
+		auto texture = gltfModel.textures[mat.displacement.displacementGeometryTexture];
 		std::vector<Aabb> aabbs;
-		aabbs.reserve(mesh.firstIndex);
+		aabbs.reserve(mesh.indexCount);
 		for (uint32_t idx = mesh.firstIndex; idx < mesh.firstIndex + mesh.indexCount - 1; idx += 3) {
 			uint32_t index0 = gltfScene.m_indices[idx] + mesh.vertexOffset;
 			uint32_t index1 = gltfScene.m_indices[idx + 1] + mesh.vertexOffset;
 			uint32_t index2 = gltfScene.m_indices[idx + 2] + mesh.vertexOffset;
-			vec3 v0 = gltfScene.m_positions[index0];
-			vec3 v1 = gltfScene.m_positions[index1];
-			vec3 v2 = gltfScene.m_positions[index2];
+			vec3 v_0 = gltfScene.m_positions[index0];
+			vec3 v_1 = gltfScene.m_positions[index1];
+			vec3 v_2 = gltfScene.m_positions[index2];
+			vec3 normal = nvmath::cross(v_1 - v_0, v_2 - v_0);
+			vec3 v0 = v_0 + (mat.displacement.displacementGeometryOffset + mat.displacement.displacementGeometryFactor) * normal;
+			vec3 v1 = v_1 + (mat.displacement.displacementGeometryOffset + mat.displacement.displacementGeometryFactor) * normal;
+			vec3 v2 = v_2 + (mat.displacement.displacementGeometryOffset + mat.displacement.displacementGeometryFactor) * normal;
 
+			// TODO: Addust according to the displacement texture.
 			vec3 minimum{
 				std::min(std::min(v0.x, v1.x), v2.x),
 				std::min(std::min(v0.y, v1.y), v2.y),
@@ -380,7 +387,19 @@ void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfS
 				std::max(std::max(v0.y, v1.y), v2.y),
 				std::max(std::max(v0.z, v1.z), v2.z),
 			};
-
+			v0 = v_0 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
+			v1 = v_1 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
+			v2 = v_2 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
+			minimum = vec3 {
+				std::min(std::min(std::min(v0.x, v1.x), v2.x), minimum.x),
+				std::min(std::min(std::min(v0.y, v1.y), v2.y), minimum.y),
+				std::min(std::min(std::min(v0.z, v1.z), v2.z), minimum.z),
+			};
+			maximum = vec3 {
+				std::max(std::max(std::max(v0.x, v1.x), v2.x), maximum.x),
+				std::max(std::max(std::max(v0.y, v1.y), v2.y), maximum.y),
+				std::max(std::max(std::max(v0.z, v1.z), v2.z), maximum.z),
+			};
 			aabbs.emplace_back(Aabb{ minimum, maximum });
 		}
 		auto buffer = m_pAlloc->createBuffer(cmdBuf, aabbs, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
@@ -388,8 +407,6 @@ void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfS
 		m_buffers[eAabb].emplace_back(buffer);
 		NAME_IDX_VK(buffer.buffer, node.primMesh);
 	}
-
-	NAME_VK(m_buffer[eTrigLights].buffer);
 }
 
 void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel)
@@ -530,6 +547,12 @@ void Scene::destroy()
 		m_pAlloc->destroy(buffers);
 	}
 	m_buffers[eIndex].clear();
+
+	for (auto& buffers : m_buffers[eAabb])
+	{
+		m_pAlloc->destroy(buffers);
+	}
+	m_buffers[eAabb].clear();
 
 	for (auto& i : m_images)
 	{
