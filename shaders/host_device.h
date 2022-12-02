@@ -136,6 +136,12 @@ struct VertexAttributes
 	uint color;     // RGBA
 };
 
+struct Aabb
+{
+  vec3 minimum;
+  vec3 maximum;
+};
+
 
 // GLTF material
 #define MATERIAL_METALLICROUGHNESS 0

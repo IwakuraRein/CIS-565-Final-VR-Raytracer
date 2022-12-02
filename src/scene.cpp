@@ -352,6 +352,46 @@ void Scene::createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	NAME_VK(m_buffer[ePuncLights].buffer);
 }
 
+void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene)
+{
+
+	for (const auto& node : gltfScene.m_nodes)
+	{
+		const auto& mesh = gltfScene.m_primMeshes[node.primMesh];
+		nvh::GltfMaterial mat = gltfScene.m_materials[mesh.materialIndex];
+		if (mat.displacement.displacementGeometryTexture == -1) continue;
+		std::vector<Aabb> aabbs;
+		aabbs.reserve(mesh.firstIndex);
+		for (uint32_t idx = mesh.firstIndex; idx < mesh.firstIndex + mesh.indexCount - 1; idx += 3) {
+			uint32_t index0 = gltfScene.m_indices[idx] + mesh.vertexOffset;
+			uint32_t index1 = gltfScene.m_indices[idx + 1] + mesh.vertexOffset;
+			uint32_t index2 = gltfScene.m_indices[idx + 2] + mesh.vertexOffset;
+			vec3 v0 = gltfScene.m_positions[index0];
+			vec3 v1 = gltfScene.m_positions[index1];
+			vec3 v2 = gltfScene.m_positions[index2];
+
+			vec3 minimum{
+				std::min(std::min(v0.x, v1.x), v2.x),
+				std::min(std::min(v0.y, v1.y), v2.y),
+				std::min(std::min(v0.z, v1.z), v2.z),
+			};
+			vec3 maximum{
+				std::max(std::max(v0.x, v1.x), v2.x),
+				std::max(std::max(v0.y, v1.y), v2.y),
+				std::max(std::max(v0.z, v1.z), v2.z),
+			};
+
+			aabbs.emplace_back(Aabb{ minimum, maximum });
+		}
+		auto buffer = m_pAlloc->createBuffer(cmdBuf, aabbs, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+		m_buffers[eAabb].emplace_back(buffer);
+		NAME_IDX_VK(buffer.buffer, node.primMesh);
+	}
+
+	NAME_VK(m_buffer[eTrigLights].buffer);
+}
+
 void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel)
 {
 	std::vector<TrigLight> trigLights;
@@ -361,7 +401,7 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 	{
 		const auto& primMesh = gltf.m_primMeshes[node.primMesh];
 		nvh::GltfMaterial mat = gltf.m_materials[primMesh.materialIndex];
-		
+
 		if (luminance(mat.emissiveFactor) > 1e-2f) {
 			//std::cout << luminance(mat.emissiveFactor) << " Emissive\n";
 
@@ -374,9 +414,9 @@ void Scene::createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 				//VertexAttributes vert2 = (*m_pVertices)[(*m_pIndices)[idx + 2]];
 
 				uint32_t index0 = gltf.m_indices[idx] + primMesh.vertexOffset;
-				uint32_t index1 = gltf.m_indices[idx+1] + primMesh.vertexOffset;
-				uint32_t index2 = gltf.m_indices[idx+2] + primMesh.vertexOffset;
-				trig.transformIndex = transforms.size()-1;
+				uint32_t index1 = gltf.m_indices[idx + 1] + primMesh.vertexOffset;
+				uint32_t index2 = gltf.m_indices[idx + 2] + primMesh.vertexOffset;
+				trig.transformIndex = transforms.size() - 1;
 				trig.matIndex = primMesh.materialIndex;
 				trig.v0 = gltf.m_positions[index0];
 				trig.uv0 = gltf.m_texcoords0[index0];
@@ -763,7 +803,7 @@ float Scene::createTrigLightImptSampAccel(std::vector<TrigLight>& trigLights, co
 	for (auto& trig : trigLights) {
 		nvh::GltfMaterial mtl = gltf.m_materials[trig.matIndex];
 		float power;
-		
+
 		if (mtl.emissiveTexture > -1) {
 			//TODO
 			power = luminance(mtl.emissiveFactor);

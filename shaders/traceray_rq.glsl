@@ -131,6 +131,10 @@ void ClosestHit(Ray r)
         rayQueryConfirmIntersectionEXT(rayQuery);  // The hit was opaque
       }
     }
+    if (rayQueryGetIntersectionTypeEXT(rayQuery, false) == gl_RayQueryCandidateIntersectionAABBEXT)
+    {
+      rayQueryConfirmIntersectionEXT(rayQuery);
+    }
   }
 
   bool hit = (rayQueryGetIntersectionTypeEXT(rayQuery, true) != gl_RayQueryCommittedIntersectionNoneEXT);
@@ -175,6 +179,10 @@ bool AnyHit(Ray r, float maxDist)
       if(HitTest(rayQuery, r))
       {
         rayQueryConfirmIntersectionEXT(rayQuery);  // The hit was opaque
+      }
+      if (rayQueryGetIntersectionTypeEXT(rayQuery, false) == gl_RayQueryCandidateIntersectionAABBEXT)
+      {
+        rayQueryConfirmIntersectionEXT(rayQuery);
       }
     }
   }

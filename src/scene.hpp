@@ -54,6 +54,7 @@ public:
 	{
 		eVertex,
 		eIndex,
+		eAabb,
 	};
 
 public:
@@ -65,6 +66,7 @@ public:
 	void setCameraFromScene(const std::string& filename, const nvh::GltfScene& gltf);
 	bool loadGltfScene(const std::string& filename, tinygltf::Model& tmodel);
 	void createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
+	void createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
 	void createTrigLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf, const tinygltf::Model& gltfModel);
 	void createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltf);
 	void destroy();
@@ -96,7 +98,7 @@ private:
 
 	// Resources
 	std::array<nvvk::Buffer, 6>                            m_buffer;           // For single buffer
-	std::array<std::vector<nvvk::Buffer>, 2>               m_buffers;          // For array of buffers (vertex/index)
+	std::array<std::vector<nvvk::Buffer>, 3>               m_buffers;          // For array of buffers (vertex/index)
 	std::vector<nvvk::Texture>                             m_textures;         // vector of all textures of the scene
 	std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_images;           // vector of all images of the scene
 	std::vector<size_t>                                    m_defaultTextures;  // for cleanup

@@ -39,7 +39,7 @@ class AccelStructure
 public:
   void setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator);
   void destroy();
-  void create(nvh::GltfScene& gltfScene, const std::vector<nvvk::Buffer>& vertex, const std::vector<nvvk::Buffer>& index);
+  void create(nvh::GltfScene& gltfScene, const std::vector<nvvk::Buffer>& vertex, const std::vector<nvvk::Buffer>& index, const std::vector<nvvk::Buffer>& aabb);
 
   VkAccelerationStructureKHR getTlas() { return m_rtBuilder.getAccelerationStructure(); }
   VkDescriptorSetLayout      getDescLayout() { return m_rtDescSetLayout; }
@@ -47,7 +47,8 @@ public:
 
 private:
   nvvk::RaytracingBuilderKHR::BlasInput primitiveToGeometry(const nvh::GltfPrimMesh& prim, VkBuffer vertex, VkBuffer index);
-  void                                  createBottomLevelAS(nvh::GltfScene& gltfScene, const std::vector<nvvk::Buffer>& vertex, const std::vector<nvvk::Buffer>& index);
+  nvvk::RaytracingBuilderKHR::BlasInput displacedPrimitiveToGeometry(const nvh::GltfPrimMesh& prim, VkBuffer aabbs);
+  void                                  createBottomLevelAS(nvh::GltfScene& gltfScene, const std::vector<nvvk::Buffer>& vertex, const std::vector<nvvk::Buffer>& index, const std::vector<nvvk::Buffer>& aabb);
   void                                  createTopLevelAS(nvh::GltfScene& gltfScene);
   void                                  createRtDescriptorSet();
 

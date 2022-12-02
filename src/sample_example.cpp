@@ -82,7 +82,7 @@ void SampleExample::setup(const VkInstance& instance,
 void SampleExample::loadScene(const std::string& filename)
 {
 	m_scene.load(filename);
-	m_accelStruct.create(m_scene.getScene(), m_scene.getBuffers(Scene::eVertex), m_scene.getBuffers(Scene::eIndex));
+	m_accelStruct.create(m_scene.getScene(), m_scene.getBuffers(Scene::eVertex), m_scene.getBuffers(Scene::eIndex), m_scene.getBuffers(Scene::eAabb));
 
 	// The picker is the helper to return information from a ray hit under the mouse cursor
 	m_picker.setTlas(m_accelStruct.getTlas());
