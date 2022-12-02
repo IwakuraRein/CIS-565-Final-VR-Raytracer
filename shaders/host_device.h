@@ -83,7 +83,8 @@ eInstData = 2,
 ePuncLights = 3,
 eTrigLights = 4,
 eLightBufInfo = 5,
-eTextures = 6  // must be last elem            
+eMinMax   = 6,
+eTextures = 7  // must be last elem            
 END_ENUM();
 
 // Environment - Set 3
@@ -199,8 +200,13 @@ struct GltfShadeMaterial
 	int  clearcoatTexture;
 	int  clearcoatRoughnessTexture;
 	uint sheen;
-	int  pad;
+	
+	int displacementTexture;
 	// 52
+	int minMaxTexture;
+	float displacementFactor;
+	float displacementOffset;
+	int pad;
 };
 
 // Gbuffer

@@ -82,7 +82,9 @@ public:
 	SceneCamera& getCamera() { return m_camera; }
 private:
 	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
+	void createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, tinygltf::Model& gltfModel);
 	void createDescriptorSet(const nvh::GltfScene& gltf);
+	std::unique_ptr<unsigned char> generateMinMax(unsigned char* buf, int w, int h, int level, unsigned char* lastBuf);
 
 	nvh::GltfScene m_gltf;
 	nvh::GltfStats m_stats;
@@ -99,7 +101,9 @@ private:
 	// Resources
 	std::array<nvvk::Buffer, 6>                            m_buffer;           // For single buffer
 	std::array<std::vector<nvvk::Buffer>, 3>               m_buffers;          // For array of buffers (vertex/index)
+	std::vector<nvvk::Texture>                             m_minMaxTextures;   // BVH of displacement map
 	std::vector<nvvk::Texture>                             m_textures;         // vector of all textures of the scene
+	std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_minMaxImages;     // vector of all images of the BVH of displacement map
 	std::vector<std::pair<nvvk::Image, VkImageCreateInfo>> m_images;           // vector of all images of the scene
 	std::vector<size_t>                                    m_defaultTextures;  // for cleanup
 

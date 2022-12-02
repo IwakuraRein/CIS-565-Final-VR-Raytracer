@@ -48,6 +48,7 @@ layout(set = S_SCENE, binding = eMaterials,	scalar)		buffer _MaterialBuffer	{ Gl
 layout(set = S_SCENE, binding = ePuncLights,scalar)		buffer _PuncLights		{ PuncLight puncLights[]; };
 layout(set = S_SCENE, binding = eTrigLights,scalar)		buffer _TrigLights		{ TrigLight trigLights[]; };
 layout(set = S_SCENE, binding = eLightBufInfo     )		uniform _LightBufInfo		{ LightBufInfo lightBufInfo; };
+layout(set = S_SCENE, binding = eMinMax         )   uniform sampler2D		minMaxTextures[]; 
 layout(set = S_SCENE, binding = eTextures         )   uniform sampler2D		texturesMap[]; 
 //
 layout(set = S_ENV, binding = eSunSky,		scalar)		uniform _SSBuffer		{ SunAndSky _sunAndSky; };

@@ -98,6 +98,7 @@ bool Scene::load(const std::string& filename)
 	createInstanceDataBuffer(cmdBuf, gltf);
 	createTrigLightBuffer(cmdBuf, gltf, tmodel);
 	createAabbBuffer(cmdBuf, gltf, tmodel);
+	createMinMaxTextures(cmdBuf, gltf, tmodel);
 
 	// light buffer info buffer
 	if (m_lightBufInfo.puncLightSize > 0 || m_lightBufInfo.trigLightSize > 0)
@@ -355,11 +356,10 @@ void Scene::createPuncLightBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& 
 
 void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, const tinygltf::Model& gltfModel)
 {
-
 	for (const auto& node : gltfScene.m_nodes)
 	{
 		const auto& mesh = gltfScene.m_primMeshes[node.primMesh];
-		nvh::GltfMaterial mat = gltfScene.m_materials[mesh.materialIndex];
+		const auto& mat = gltfScene.m_materials[mesh.materialIndex];
 		if (mat.displacement.displacementGeometryTexture == -1) continue;
 		auto texture = gltfModel.textures[mat.displacement.displacementGeometryTexture];
 		std::vector<Aabb> aabbs;
@@ -476,6 +476,7 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 
 	std::vector<GltfShadeMaterial> shadeMaterials;
 	shadeMaterials.reserve(gltf.m_materials.size());
+	int displacementCount{ 0 };
 	for (auto& m : gltf.m_materials)
 	{
 		GltfShadeMaterial smat{};
@@ -513,6 +514,11 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 		smat.clearcoatTexture = m.clearcoat.texture;
 		smat.clearcoatRoughnessTexture = m.clearcoat.roughnessTexture;
 		smat.sheen = packUnorm4x8(vec4(m.sheen.colorFactor, m.sheen.roughnessFactor));
+
+		smat.displacementTexture = m.displacement.displacementGeometryTexture;
+		smat.displacementFactor  = m.displacement.displacementGeometryFactor;
+		smat.displacementOffset  = m.displacement.displacementGeometryOffset;
+		smat.minMaxTexture       = m.displacement.displacementGeometryTexture != -1? displacementCount++ : -1;
 
 		shadeMaterials.emplace_back(smat);
 	}
@@ -575,6 +581,19 @@ void Scene::destroy()
 		t = {};
 	}
 	m_textures.clear();
+
+	for (auto& i : m_minMaxImages)
+	{
+		m_pAlloc->destroy(i.first);
+		i = {};
+	}
+	m_minMaxImages.clear();
+	for (auto& t : m_minMaxTextures)
+	{
+		vkDestroyImageView(m_device, t.descriptor.imageView, nullptr);
+		t = {};
+	}
+	m_minMaxTextures.clear();
 
 
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
@@ -725,6 +744,104 @@ void Scene::createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfMod
 	timer.print();
 }
 
+std::unique_ptr<unsigned char> Scene::generateMinMax(unsigned char* buf, int w, int h, int level, unsigned char* lastBuf) {
+	if (level == 0) {
+
+	}
+	else {
+
+	}
+	return nullptr;
+}
+
+void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, tinygltf::Model& gltfModel) {
+	LOGI(" - Creating Min Max Textures");
+	MilliTimer timer;
+
+	VkFormat format = VK_FORMAT_R8G8_SNORM;
+
+	static std::array<uint8_t, 2> white = { 255, 255 };
+
+	// Sampler
+	VkSamplerCreateInfo samplerCreateInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+	samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+	samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+	samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+	for (const auto& node : gltfScene.m_nodes)
+	{
+		const auto& mesh = gltfScene.m_primMeshes[node.primMesh];
+		const auto& mat = gltfScene.m_materials[mesh.materialIndex];
+		if (mat.displacement.displacementGeometryTexture == -1) continue;
+
+		auto& gltfTexture = gltfModel.textures[mat.displacement.displacementGeometryTexture];
+		auto& gltfimage = gltfModel.images[gltfTexture.source];
+		VkImageCreateInfo      imageCreateInfo;
+		nvvk::Image            image;
+		if (gltfimage.width == -1 || gltfimage.height == -1 || gltfimage.image.empty())
+		{
+			// Image not present or incorrectly loaded (image.empty)
+			imageCreateInfo = nvvk::makeImage2DCreateInfo(VkExtent2D{ 1, 1 });
+			image = m_pAlloc->createImage(cmdBuf, 2, white.data(), imageCreateInfo);
+		}
+		else {
+			VkDeviceSize bufferSize = gltfimage.image.size();
+			auto         imgSize = VkExtent2D{ (uint32_t)gltfimage.width, (uint32_t)gltfimage.height };
+
+			imageCreateInfo = nvvk::makeImage2DCreateInfo(imgSize, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
+			image = m_pAlloc->createImage(imageCreateInfo);
+			//image = m_pAlloc->createImage(cmdBuf, bufferSize, (void*)buffer.get(), imageCreateInfo, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+			// Copy buffer to image
+			VkImageSubresourceRange subresourceRange{};
+			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			subresourceRange.baseArrayLayer = 0;
+			subresourceRange.baseMipLevel = 0;
+			subresourceRange.layerCount = 1;
+			subresourceRange.levelCount = imageCreateInfo.mipLevels;
+
+			VkOffset3D               offset = { 0 };
+			VkImageSubresourceLayers subresource = { 0 };
+			subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			subresource.layerCount = 1;
+
+			std::unique_ptr<unsigned char> last_buffer = nullptr;
+			for (uint32_t i = 0; i < imageCreateInfo.mipLevels; i++) {
+				if (i == 1) {
+					offset.x = gltfimage.width;
+					offset.y = gltfimage.height;
+				}
+				if (i > 1) {
+					offset.x = offset.x > 1 ? offset.x / 2 : 1;
+					offset.y = offset.y > 1 ? offset.y / 2 : 1;
+				}
+				subresource.mipLevel = i;
+				auto buffer = generateMinMax(gltfimage.image.data(), gltfimage.width, gltfimage.height, i, last_buffer.get());
+				m_pAlloc->getStaging()->cmdToImage(cmdBuf, image.image, offset, imageCreateInfo.extent, subresource, bufferSize, (void*)buffer.get());
+				last_buffer = std::move(buffer);
+			}
+
+			m_minMaxImages.emplace_back(image, imageCreateInfo);
+			VkImageViewCreateInfo ivInfo = nvvk::makeImageViewCreateInfo(m_minMaxImages.back().first.image, m_minMaxImages.back().second);
+			m_minMaxTextures.emplace_back(m_pAlloc->createTexture(m_minMaxImages.back().first, ivInfo, samplerCreateInfo));
+
+			NAME_IDX_VK(m_minMaxTextures.back().image, m_minMaxTextures.size() - 1);
+		}
+	}
+
+	if (m_minMaxTextures.empty())
+	{
+		// No images, add a default one.
+		VkImageCreateInfo imageCreateInfo = nvvk::makeImage2DCreateInfo(VkExtent2D{ 1, 1 });
+		nvvk::Image image = m_pAlloc->createImage(cmdBuf, 2, white.data(), imageCreateInfo);
+		m_minMaxImages.emplace_back(image, imageCreateInfo);
+		VkImageViewCreateInfo ivInfo = nvvk::makeImageViewCreateInfo(m_minMaxImages.back().first.image, m_minMaxImages.back().second);
+		m_minMaxTextures.emplace_back(m_pAlloc->createTexture(m_minMaxImages.back().first, ivInfo, samplerCreateInfo));
+	}
+
+	timer.print();
+}
+
 //--------------------------------------------------------------------------------------------------
 // Creating the descriptor for the scene
 // Vertex, Index and Textures are array of buffers or images
@@ -740,6 +857,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	bind.addBinding({ SceneBindings::eCamera, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eMaterials, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eTextures, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nbTextures, flag });
+	bind.addBinding({ SceneBindings::eMinMax, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(m_minMaxTextures.size()), flag });
 	bind.addBinding({ SceneBindings::eInstData, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::ePuncLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
 	bind.addBinding({ SceneBindings::eTrigLights, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, flag });
@@ -760,6 +878,9 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	std::vector<VkDescriptorImageInfo> t_info;
 	for (auto& texture : m_textures)
 		t_info.emplace_back(texture.descriptor);
+	std::vector<VkDescriptorImageInfo> t_info2;
+	for (auto& texture : m_minMaxTextures)
+		t_info2.emplace_back(texture.descriptor);
 
 	std::vector<VkWriteDescriptorSet> writes;
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eCamera, &dbi[eCameraMat]));
@@ -770,6 +891,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	// writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
 	//writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
+	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eMinMax, t_info2.data()));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));
 
 	// Writing the information

@@ -524,6 +524,7 @@ void SampleExample::onMouseMotion(int x, int y)
 //
 void SampleExample::onMouseButton(int button, int action, int mods)
 {
+	if (m_busy) return;
 	AppBaseVk::onMouseButton(button, action, mods);
 	if ((m_inputs.lmb || m_inputs.rmb || m_inputs.mmb) == false && action == GLFW_RELEASE && m_descaling == true)
 	{
