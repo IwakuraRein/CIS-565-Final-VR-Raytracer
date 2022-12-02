@@ -84,7 +84,7 @@ private:
 	void createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfModel);
 	void createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, tinygltf::Model& gltfModel);
 	void createDescriptorSet(const nvh::GltfScene& gltf);
-	std::unique_ptr<unsigned char> generateMinMax(unsigned char* buf, int w, int h, int level, unsigned char* lastBuf);
+	std::unique_ptr<unsigned char> generateMinMax(unsigned char* buf, int w, int h, int lastW, int lastH, unsigned char* lastBuf);
 
 	nvh::GltfScene m_gltf;
 	nvh::GltfStats m_stats;

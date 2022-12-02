@@ -744,8 +744,8 @@ void Scene::createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfMod
 	timer.print();
 }
 
-std::unique_ptr<unsigned char> Scene::generateMinMax(unsigned char* buf, int w, int h, int level, unsigned char* lastBuf) {
-	if (level == 0) {
+std::unique_ptr<unsigned char> Scene::generateMinMax(unsigned char* buf, int w, int h, int lastW, int lastH, unsigned char* lastBuf) {
+	if (lastBuf == nullptr) {
 
 	}
 	else {
@@ -806,19 +806,23 @@ void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 			subresource.layerCount = 1;
 
 			std::unique_ptr<unsigned char> last_buffer = nullptr;
+			int thisW = gltfimage.width;
+			int thisH = gltfimage.height;
+			int lastW = 0;
+			int lastH = 0;
 			for (uint32_t i = 0; i < imageCreateInfo.mipLevels; i++) {
-				if (i == 1) {
-					offset.x = gltfimage.width;
-					offset.y = gltfimage.height;
-				}
-				if (i > 1) {
-					offset.x = offset.x > 1 ? offset.x / 2 : 1;
-					offset.y = offset.y > 1 ? offset.y / 2 : 1;
-				}
+				//offset.x += lastW;
+				//offset.y += lastH;
 				subresource.mipLevel = i;
-				auto buffer = generateMinMax(gltfimage.image.data(), gltfimage.width, gltfimage.height, i, last_buffer.get());
+
+				auto buffer = generateMinMax(gltfimage.image.data(), thisW, thisH, lastW, lastH, last_buffer.get());
 				m_pAlloc->getStaging()->cmdToImage(cmdBuf, image.image, offset, imageCreateInfo.extent, subresource, bufferSize, (void*)buffer.get());
 				last_buffer = std::move(buffer);
+
+				lastH = thisH;
+				lastW = thisW;
+				thisW = thisW > 1 ? thisW / 2 : 1;
+				thisH = thisH > 1 ? thisH / 2 : 1;
 			}
 
 			m_minMaxImages.emplace_back(image, imageCreateInfo);
