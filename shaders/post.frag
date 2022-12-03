@@ -98,62 +98,64 @@ vec3 toneLocalExposure(vec3 RGB, float logAvgLum) {
 }
 
 void main() {
-  if (debugging_mode == eDepth){
-    float depth = texture(inDirectImage, uvCoords * tm.zoom).w;
-    depth *= pow(2, tm.brightness);
-    depth += tm.saturation;
-    depth = clamp(pow(depth, 1.0 / tm.contrast), 0.f, 1.f);
-    fragColor = vec4(depth, depth, depth, 1.0);
-  }
-  else if(debugging_mode > eIndirectStage) {
-    fragColor = vec4(texture(inDirectImage, uvCoords * tm.zoom).xyz, 1.0);
-  }
-  else {
-    // Raw result of ray tracing
-    vec4 hdr;
-    if(debugging_mode == eDirectStage)
-      hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba;
-    else if(debugging_mode == eIndirectStage)
-      hdr = texture(inIndirectImage, uvCoords * tm.zoom).rgba;
-    else
-      hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, uvCoords * tm.zoom).rgba;
-    hdr.w = 1.0;
-    if(((tm.autoExposure >> 0) & 1) == 1) {
-      vec4 avg; // Get the average value of the image
-      if(debugging_mode == eDirectStage)
-        avg = textureLod(inDirectImage, vec2(0.5), 20);
-      else if(debugging_mode == eIndirectStage)
-        avg = textureLod(inIndirectImage, vec2(0.5), 20);
-      else
-        avg = (textureLod(inDirectImage, vec2(0.5), 20) + textureLod(inIndirectImage, vec2(0.5), 20));
-      avg.w = 1.0;
-      float avgLum2 = luminance(avg.rgb);                  // Find the luminance
-      if(((tm.autoExposure >> 1) & 1) == 1)
-        hdr.rgb = toneLocalExposure(hdr.rgb, avgLum2);  // Adjust exposure
-      else
-        hdr.rgb = toneExposure(hdr.rgb, avgLum2);  // Adjust exposure
-    }
+  // if (debugging_mode == eDepth){
+  //   float depth = texture(inDirectImage, uvCoords * tm.zoom).w;
+  //   depth *= pow(2, tm.brightness);
+  //   depth += tm.saturation;
+  //   depth = clamp(pow(depth, 1.0 / tm.contrast), 0.f, 1.f);
+  //   fragColor = vec4(depth, depth, depth, 1.0);
+  // }
+  // else if(debugging_mode > eIndirectStage) {
+  //   fragColor = vec4(texture(inDirectImage, uvCoords * tm.zoom).xyz, 1.0);
+  // }
+  // else {
+  //   // Raw result of ray tracing
+  //   vec4 hdr;
+  //   if(debugging_mode == eDirectStage)
+  //     hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba;
+  //   else if(debugging_mode == eIndirectStage)
+  //     hdr = texture(inIndirectImage, uvCoords * tm.zoom).rgba;
+  //   else
+  //     hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, uvCoords * tm.zoom).rgba;
+  //   hdr.w = 1.0;
+  //   if(((tm.autoExposure >> 0) & 1) == 1) {
+  //     vec4 avg; // Get the average value of the image
+  //     if(debugging_mode == eDirectStage)
+  //       avg = textureLod(inDirectImage, vec2(0.5), 20);
+  //     else if(debugging_mode == eIndirectStage)
+  //       avg = textureLod(inIndirectImage, vec2(0.5), 20);
+  //     else
+  //       avg = (textureLod(inDirectImage, vec2(0.5), 20) + textureLod(inIndirectImage, vec2(0.5), 20));
+  //     avg.w = 1.0;
+  //     float avgLum2 = luminance(avg.rgb);                  // Find the luminance
+  //     if(((tm.autoExposure >> 1) & 1) == 1)
+  //       hdr.rgb = toneLocalExposure(hdr.rgb, avgLum2);  // Adjust exposure
+  //     else
+  //       hdr.rgb = toneExposure(hdr.rgb, avgLum2);  // Adjust exposure
+  //   }
 
-    // Tonemap + Linear to sRgb
-    vec3 color = toneMap(hdr.rgb, tm.avgLum);
+  //   // Tonemap + Linear to sRgb
+  //   vec3 color = toneMap(hdr.rgb, tm.avgLum);
 
-    // Remove banding
-    uvec3 r = pcg3d(uvec3(gl_FragCoord.xy, 0));
-    vec3 noise = uintBitsToFloat(0x3f800000 | (r >> 9)) - 1.0f;
-    color = dither(sRGBToLinear(color), noise, 1. / 255.);
+  //   // Remove banding
+  //   uvec3 r = pcg3d(uvec3(gl_FragCoord.xy, 0));
+  //   vec3 noise = uintBitsToFloat(0x3f800000 | (r >> 9)) - 1.0f;
+  //   color = dither(sRGBToLinear(color), noise, 1. / 255.);
 
-    //contrast
-    color = clamp(mix(vec3(0.5), color, tm.contrast), 0, 1);
-    // brighness
-    color = pow(color, vec3(1.0 / tm.brightness));
-    // saturation
-    vec3 i = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
-    color = mix(i, color, tm.saturation);
-    // vignette
-    vec2 uv = ((uvCoords * tm.renderingRatio) - 0.5) * 2.0;
-    color *= 1.0 - dot(uv, uv) * tm.vignette;
+  //   //contrast
+  //   color = clamp(mix(vec3(0.5), color, tm.contrast), 0, 1);
+  //   // brighness
+  //   color = pow(color, vec3(1.0 / tm.brightness));
+  //   // saturation
+  //   vec3 i = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
+  //   color = mix(i, color, tm.saturation);
+  //   // vignette
+  //   vec2 uv = ((uvCoords * tm.renderingRatio) - 0.5) * 2.0;
+  //   color *= 1.0 - dot(uv, uv) * tm.vignette;
 
-    fragColor.xyz = color;
+  //   fragColor.xyz = color;
+  //   fragColor.w = 1.0;
+  // }
+      fragColor.xyz = texture(inDirectImage, uvCoords).xyz;
     fragColor.w = 1.0;
-  }
 }

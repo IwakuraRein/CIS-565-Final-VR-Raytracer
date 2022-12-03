@@ -88,6 +88,12 @@ void main() {
   ivec2 imageRes = rtxState.size;
   /*ivec2*/ imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
 
+  vec2 uv = vec2(imageCoords.x / float(imageRes.x), imageCoords.y / float(imageRes.y));
+  float tmp = textureLod(minMaxTextures[0], uv, 0).y;
+  imageStore(thisDirectResultImage, imageCoords, vec4(tmp, tmp, tmp, 1.0));
+  //imageStore(thisDirectResultImage, imageCoords, texture(texturesMap[0], uv).rgba);
+  return;
+
   // Initialize the seed for the random number only once once
   // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
   // prd.seed = s.x + s.y;

@@ -744,21 +744,47 @@ void Scene::createTextureImages(VkCommandBuffer cmdBuf, tinygltf::Model& gltfMod
 	timer.print();
 }
 
-std::unique_ptr<unsigned char> Scene::generateMinMax(unsigned char* buf, int w, int h, int lastW, int lastH, unsigned char* lastBuf) {
-	if (lastBuf == nullptr) {
-
+std::vector<unsigned char> Scene::generateMinMax(
+	const tinygltf::Image& image, const std::vector<unsigned char>& lastBuf, int W, int H, int lastW, int lastH) {
+	static int stride = image.image.size() / image.width / image.height;
+	std::vector<unsigned char> thisBuf;
+	if (lastBuf.empty()) {
+		thisBuf.reserve(image.width * image.height * 2);
+		for (int w = 0; w < image.width; w++) {
+			for (int h = 0; h < image.height; h++) {
+				//thisBuf.push_back(image.image[(h * W + w) * stride]);
+				//thisBuf.push_back(image.image[(h * W + w) * stride]);
+				thisBuf.push_back(image.image[(w * H + h) * stride]);
+				thisBuf.push_back(image.image[(w * H + h) * stride]);
+			}
+		}
 	}
 	else {
-
+		thisBuf.resize(W * H * 2);
+		for (int w = 0; w < W; w++) {
+			for (int h = 0; h < H; h++) {
+				if (h * 2 > lastH || w * 2 > lastW) {
+					thisBuf[(h * W + w) * 2] = 0;
+					thisBuf[(h * W + w) * 2 + 1] = 255;
+					break;
+				}
+				std::pair<unsigned char, unsigned char> p0{ lastBuf[(w * lastH * 2 + h * 2) * 2],             lastBuf[(w * lastH * 2 + h * 2) * 2 + 1] };
+				std::pair<unsigned char, unsigned char> p1{ lastBuf[(w * lastH * 2 + h * 2 + 1) * 2],         lastBuf[(w * lastH * 2 + h * 2 + 1) * 2 + 1] };
+				std::pair<unsigned char, unsigned char> p2{ lastBuf[(w * lastH * 2 + lastH + h * 2 + 1) * 2], lastBuf[(w * lastH * 2 + lastH + h * 2 + 1) * 2 + 1] };
+				std::pair<unsigned char, unsigned char> p3{ lastBuf[(w * lastH * 2 + lastH + h * 2) * 2],     lastBuf[(w * lastH * 2 + lastH + h * 2) * 2 + 1] };
+				thisBuf[(w * H + h) * 2] = std::min(p0.first, std::min(p1.first, std::min(p2.first, p3.first)));
+				thisBuf[(w * H + h) * 2 + 1] = std::max(p0.second, std::max(p1.second, std::max(p2.second, p3.second)));
+			}
+		}
 	}
-	return nullptr;
+	return thisBuf;
 }
 
 void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfScene, tinygltf::Model& gltfModel) {
 	LOGI(" - Creating Min Max Textures");
 	MilliTimer timer;
 
-	VkFormat format = VK_FORMAT_R8G8_SNORM;
+	VkFormat format = VK_FORMAT_R8G8_UNORM;
 
 	static std::array<uint8_t, 2> white = { 255, 255 };
 
@@ -768,10 +794,8 @@ void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 	samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
 	samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
-	for (const auto& node : gltfScene.m_nodes)
+	for (const auto& mat : gltfScene.m_materials)
 	{
-		const auto& mesh = gltfScene.m_primMeshes[node.primMesh];
-		const auto& mat = gltfScene.m_materials[mesh.materialIndex];
 		if (mat.displacement.displacementGeometryTexture == -1) continue;
 
 		auto& gltfTexture = gltfModel.textures[mat.displacement.displacementGeometryTexture];
@@ -785,12 +809,13 @@ void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 			image = m_pAlloc->createImage(cmdBuf, 2, white.data(), imageCreateInfo);
 		}
 		else {
-			VkDeviceSize bufferSize = gltfimage.image.size();
 			auto         imgSize = VkExtent2D{ (uint32_t)gltfimage.width, (uint32_t)gltfimage.height };
 
-			imageCreateInfo = nvvk::makeImage2DCreateInfo(imgSize, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
+			imageCreateInfo = nvvk::makeImage2DCreateInfo(imgSize, format, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 			image = m_pAlloc->createImage(imageCreateInfo);
-			//image = m_pAlloc->createImage(cmdBuf, bufferSize, (void*)buffer.get(), imageCreateInfo, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			//image = m_pAlloc->createImage(cmdBuf, gltfimage.image.size(), (void*)gltfimage.image.data(), imageCreateInfo);
+
+			nvvk::cmdBarrierImageLayout(cmdBuf, image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 			// Copy buffer to image
 			VkImageSubresourceRange subresourceRange{};
@@ -805,25 +830,28 @@ void Scene::createMinMaxTextures(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 			subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			subresource.layerCount = 1;
 
-			std::unique_ptr<unsigned char> last_buffer = nullptr;
+			std::vector<unsigned char> last_buffer;
 			int thisW = gltfimage.width;
 			int thisH = gltfimage.height;
 			int lastW = 0;
 			int lastH = 0;
+
 			for (uint32_t i = 0; i < imageCreateInfo.mipLevels; i++) {
-				//offset.x += lastW;
-				//offset.y += lastH;
 				subresource.mipLevel = i;
 
-				auto buffer = generateMinMax(gltfimage.image.data(), thisW, thisH, lastW, lastH, last_buffer.get());
-				m_pAlloc->getStaging()->cmdToImage(cmdBuf, image.image, offset, imageCreateInfo.extent, subresource, bufferSize, (void*)buffer.get());
+				auto buffer = generateMinMax(gltfimage, last_buffer, thisW, thisH, lastW, lastH);
+				m_pAlloc->getStaging()->cmdToImage(cmdBuf, image.image, offset, { static_cast<unsigned int>(thisW), static_cast<unsigned int>(thisH), 1 }, subresource, thisW * thisH * 2, buffer.data());
 				last_buffer = std::move(buffer);
 
 				lastH = thisH;
 				lastW = thisW;
 				thisW = thisW > 1 ? thisW / 2 : 1;
 				thisH = thisH > 1 ? thisH / 2 : 1;
+				//offset.x += lastW;
+				//offset.y += lastH;
 			}
+
+			nvvk::cmdBarrierImageLayout(cmdBuf, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 			m_minMaxImages.emplace_back(image, imageCreateInfo);
 			VkImageViewCreateInfo ivInfo = nvvk::makeImageViewCreateInfo(m_minMaxImages.back().first.image, m_minMaxImages.back().second);
@@ -895,7 +923,7 @@ void Scene::createDescriptorSet(const nvh::GltfScene& gltf)
 	// writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eTrigLightTransforms, &dbi[eTrigLightTransforms]));
 	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eLightBufInfo, &dbi[eLightBufInfo]));
 	//writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eGbuffer, &dbi[eGbuffer]));
-	writes.emplace_back(bind.makeWrite(m_descSet, SceneBindings::eMinMax, t_info2.data()));
+	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eMinMax, t_info2.data()));
 	writes.emplace_back(bind.makeWriteArray(m_descSet, SceneBindings::eTextures, t_info.data()));
 
 	// Writing the information
