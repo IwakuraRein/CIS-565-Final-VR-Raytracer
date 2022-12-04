@@ -24,7 +24,6 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-#define DIRECT_ONLY
 
 #ifdef __cplusplus
 #include <stdint.h>
@@ -36,6 +35,8 @@ using vec3 = nvmath::vec3f;
 using vec4 = nvmath::vec4f;
 using mat4 = nvmath::mat4f;
 using uint = unsigned int;
+using uvec4 = nvmath::vec4ui;
+using uvec2 = nvmath::vec2ui;
 #endif
 
 // clang-format off
@@ -120,11 +121,10 @@ END_ENUM();
 // clang-format on
 
 START_ENUM(ReSTIRState)
-eNone = 0,
-eRIS = 1,
-eSpatial = 2,
-eTemporal = 3,
-eSpatiotemporal = 4
+eRIS = 0,
+eSpatial = 1,
+eTemporal = 2,
+eSpatiotemporal = 3
 END_ENUM();
 
 // Camera of the scene
@@ -238,6 +238,7 @@ struct GISample {
 	vec3 L;
 	vec3 xv, nv;
 	vec3 xs, ns;
+	float pHat;
 };
 
 struct DirectReservoir {

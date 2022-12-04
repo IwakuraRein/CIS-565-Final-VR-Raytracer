@@ -37,7 +37,7 @@
 float dummyPdf;
 
 bool IsPdfInvalid(float p) {
-    return p <= 0.0 || isnan(p);
+    return p <= 1e-8 || isnan(p);
 }
 
 bool Occlusion(Ray ray, State state, float dist) {
@@ -168,19 +168,53 @@ float SamplePuncLight(vec3 x, out LightSample lightSample) {
         return InvalidPdf;
     }
 
-    int id = min(int(float(lightBufInfo.trigLightSize) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
+    int id = min(int(float(lightBufInfo.puncLightSize) * rand(prd.seed)), int(lightBufInfo.puncLightSize) - 1);
 
     if (rand(prd.seed) > puncLights[id].impSamp.q) {
         id = puncLights[id].impSamp.alias;
     }
 
     PuncLight light = puncLights[id];
+	
+	/*
     vec3 dir = light.position - x;
     float dist = length(dir);
     lightSample.Li = light.color * light.intensity / (dist * dist);
     lightSample.wi = dir / dist;
     lightSample.dist = dist;
     return light.impSamp.pdf;
+	*/	
+    vec4 dirAndPdf;
+    float dist  = 1e32;
+    
+    float rangeAttenuation = 1.0;
+    float spotAttenuation = 1.0;
+
+    dirAndPdf.xyz = -light.direction;
+
+    if(light.type != LightType_Directional)
+    {
+      dirAndPdf.xyz = light.position - x;
+	  dist = length(dirAndPdf.xyz);
+	  dirAndPdf.xyz /= dist;
+
+    // Compute range and spot light attenuation.
+		rangeAttenuation = getRangeAttenuation(light.range, dist);
+
+		if(light.type == LightType_Spot)
+		{
+		  spotAttenuation = getSpotAttenuation(dirAndPdf.xyz, light.direction, light.outerConeCos, light.innerConeCos);
+		}
+    }
+
+    lightSample.Li = (rangeAttenuation * spotAttenuation * light.intensity) * light.color;
+    //dirAndPdf.w = light.impSamp.pdf;
+    dirAndPdf.w = 1.0;
+	
+	lightSample.wi = dirAndPdf.xyz;
+    lightSample.dist = dist;
+	
+  return dirAndPdf.w;
 }
 
 float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
@@ -198,11 +232,15 @@ float SampleDirectLightNoVisibility(vec3 pos, out LightSample lightSample) {
     else {
         if (rnd < rtxState.environmentProb + (1.0 - rtxState.environmentProb) * lightBufInfo.trigSampProb) {
             // Sample triangle mesh light
-            return (1.0 - rtxState.environmentProb) * SampleTriangleLight(pos, lightSample) * lightBufInfo.trigSampProb;
+            return (1.0 - rtxState.environmentProb) * SampleTriangleLight(pos, lightSample) 
+			// * lightBufInfo.trigSampProb
+			;
         }
         else {
             // Sample point light
-            return (1.0 - rtxState.environmentProb) * SamplePuncLight(pos, lightSample) * (1.0 - lightBufInfo.trigSampProb);
+            return (1.0 - rtxState.environmentProb) * SamplePuncLight(pos, lightSample) 
+			// * (1.0 - lightBufInfo.trigSampProb)
+			;
         }
     }
 }

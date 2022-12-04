@@ -122,7 +122,6 @@ bool SampleGUI::guiRayTracing()
 	bool  changed{ false };
 	auto& rtxState(_se->m_rtxState);
 
-	changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
 	changed |= GuiH::Slider("Max Iteration ", "", &_se->m_maxFrames, nullptr, Normal, 1, 1000);
 	changed |= GuiH::Slider("De-scaling ",
 		"Reduce resolution while navigating.\n"
@@ -147,7 +146,6 @@ bool SampleGUI::guiRayTracing()
 			// "HeatMap",
 		});
 	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
-	changed |= GuiH::Checkbox("MIS", "", (bool*)&rtxState.MIS);
 
 	// if (rtxState.debugging_mode == eHeatmap)
 	// {
@@ -161,7 +159,7 @@ bool SampleGUI::guiRayTracing()
 
 	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.ReSTIRState, nullptr, Normal,
 		{
-			"None",
+			//"None",
 			"RIS",
 			"Spatial",
 			"Temporal",
@@ -178,9 +176,11 @@ bool SampleGUI::guiRayTracing()
 		return changed;
 		});
 	GuiH::Group<bool>("Indirect Light", false, [&] {
-		changed |= GuiH::Slider("Sample Rate",
-			"Samples per pixel",
-			&rtxState.spp, nullptr, Normal, 0, 16);
+		//changed |= GuiH::Slider("Sample Rate",
+		//	"Samples per pixel",
+		//	&rtxState.spp, nullptr, Normal, 0, 16);
+		changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
+		changed |= GuiH::Checkbox("MIS", "", (bool*)&rtxState.MIS);
 		return changed;
 		});
 	return changed;
