@@ -99,7 +99,7 @@ private:
   VkPipelineLayout m_pipelineLayout{ VK_NULL_HANDLE };
   VkPipeline       m_directPipeline{ VK_NULL_HANDLE };
   VkPipeline       m_indirectPipeline{ VK_NULL_HANDLE };
-  VkPipeline       m_gBufferPipeline{ VK_NULL_HANDLE };
+  VkPipeline       m_denoisePipeline{ VK_NULL_HANDLE };
 
   VkExtent2D m_size{};
 

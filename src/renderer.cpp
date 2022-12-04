@@ -33,12 +33,10 @@
 #include "renderer.hpp"
 #include "tools.hpp"
 
-  // Shaders
 #include "autogen/direct_stage.comp.h"
 #include "autogen/indirect_stage.comp.h"
-//--------------------------------------------------------------------------------------------------
-//
-//
+#include "autogen/denoise.comp.h"
+
 void Renderer::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount)
 {
 	m_device = device;
@@ -48,9 +46,6 @@ void Renderer::setup(const VkDevice& device, const VkPhysicalDevice& physicalDev
 	m_debug.setup(device);
 }
 
-//--------------------------------------------------------------------------------------------------
-//
-//
 void Renderer::destroy()
 {
 	for (int i = 0; i < 2; i++) {
@@ -67,6 +62,7 @@ void Renderer::destroy()
 
 	vkDestroyPipeline(m_device, m_directPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_indirectPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_denoisePipeline, nullptr);
 	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 
 	m_pipelineLayout = VK_NULL_HANDLE;
@@ -106,7 +102,6 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, direct_stage_comp, sizeof(direct_stage_comp));
 	computePipelineCreateInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 	computePipelineCreateInfo.stage.pName = "main";
-
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_directPipeline);
 	m_debug.setObjectName(m_directPipeline, "Renderer-Direct");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
@@ -114,6 +109,11 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
 	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
 	m_debug.setObjectName(m_indirectPipeline, "Renderer-Indirect");
+	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
+
+	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, denoise_comp, sizeof(denoise_comp));
+	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_denoisePipeline);
+	m_debug.setObjectName(m_denoisePipeline, "Denoise");
 	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 	timer.print();

@@ -113,11 +113,6 @@ void RenderOutput::createOffscreenRender(const VkExtent2D& size)
     VkImageViewCreateInfo ivInfo1 = nvvk::makeImageViewCreateInfo(directImage1.image, colorCreateInfo);
     VkImageViewCreateInfo ivInfo2 = nvvk::makeImageViewCreateInfo(directImage2.image, colorCreateInfo);
 
-    VkExtent2D indSize{ size.width / 2, size.height / 2 };
-    colorCreateInfo = nvvk::makeImage2DCreateInfo(
-        indSize, m_offscreenColorFormat,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true
-    );
     nvvk::Image inDirectImage1 = m_pAlloc->createImage(colorCreateInfo);
     NAME_VK(inDirectImage1.image);
     nvvk::Image inDirectImage2 = m_pAlloc->createImage(colorCreateInfo);
@@ -248,14 +243,13 @@ void RenderOutput::run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom
 //
 void RenderOutput::genMipmap(VkCommandBuffer cmdBuf)
 {
-    VkExtent2D indSize{ m_size.width / 2, m_size.height / 2 };
   LABEL_SCOPE_VK(cmdBuf);
   nvvk::cmdGenerateMipmaps(cmdBuf, m_directResult[0].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
       VK_IMAGE_LAYOUT_GENERAL);
   nvvk::cmdGenerateMipmaps(cmdBuf, m_directResult[1].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
       VK_IMAGE_LAYOUT_GENERAL);
-  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[0].image, m_offscreenColorFormat, indSize, nvvk::mipLevels(indSize), 1,
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[0].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
       VK_IMAGE_LAYOUT_GENERAL);
-  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[1].image, m_offscreenColorFormat, indSize, nvvk::mipLevels(indSize), 1,
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[1].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
       VK_IMAGE_LAYOUT_GENERAL);
 }
