@@ -40,6 +40,8 @@
 
 #include "host_device.h"
 
+//#define BLOCKWISE_RR
+
 layout(push_constant) uniform _RtxState {
   RtxState rtxState;
 };
@@ -108,15 +110,24 @@ float MIS(float f, float g) {
     return (rtxState.MIS > 0) ? powerHeuristic(f, g) : 1.0;
 }
 
+float pHatIndirect(GISample giSample, State state, vec3 wo) {
+    return resvToScalar(giSample.L);
+
+    vec3 wi = normalize(giSample.xs - giSample.xv);
+    return resvToScalar(giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi));
+}
+
+float bigWIndirect(IndirectReservoir resv, State state, vec3 wo) {
+    return resv.weight / (pHatIndirect(resv.giSample, state, wo) * float(resv.num));
+}
+
 bool findTemporalNeighbor(
-    vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out IndirectReservoir resv
+    vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, inout IndirectReservoir resv
 ) {
-
     vec3 pnorm; float pdepth; uint matHash;
-
     loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
-    if (lastCoord.x >= 0 && lastCoord.x < rtxState.size.x &&
-        lastCoord.y >= 0 && lastCoord.y < rtxState.size.y) {
+
+    if (inBound(lastCoord, rtxState.size)) {
         if (hash8bit(matId) == matHash) {
             if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
                 resv = lastIndirectResv[lastCoord.y * rtxState.size.x + lastCoord.x];
@@ -124,25 +135,29 @@ bool findTemporalNeighbor(
             }
         }
     }
-    // for (int i = -1; i <= 1; i++) {
-    //     for (int j = -1; j <= 1; j++) {
-    //         ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
-    //         loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
-    //         if (coord.x < 0 || coord.x >= rtxState.size.x ||
-    //             coord.y < 0 || coord.y >= rtxState.size.y) {
-    //             continue;
-    //         }
-    //         else if (hash8bit(matId) != matHash)
-    //             continue;
-    //         else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
-    //             continue;
-    //         }
-    //         resv = lastIndirectResv[coord.y * rtxState.size.x + coord.x];
-    //         return true;
-    //     }
-    // }
+
+    /*
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
+            loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
+            if (coord.x < 0 || coord.x >= rtxState.size.x ||
+                coord.y < 0 || coord.y >= rtxState.size.y) {
+                continue;
+            }
+            else if (hash8bit(matId) != matHash)
+                continue;
+            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+                continue;
+            }
+            resv = lastIndirectResv[coord.y * rtxState.size.x + coord.x];
+            return true;
+        }
+    }
+    */
     return false;
 }
+
 bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out IndirectReservoir resv) {
     const float Radius = 30.0;
 
@@ -152,9 +167,9 @@ bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out IndirectReservo
     int pidx = py * rtxState.size.x + px;
 
     vec3 pnorm; float pdepth; uint matHash;
-    loadLastGeometryInfo(imageCoords, pnorm, pdepth, matHash);
+    loadThisGeometryInfo(imageCoords, pnorm, pdepth, matHash);
 
-    if (px < 0 || px >= rtxState.size.x || py < 0 || py >= rtxState.size.y) {
+    if (inBound(ivec2(px, py), rtxState.size)) {
         return false;
     }
     else if (hash8bit(matId) != matHash)
@@ -165,30 +180,32 @@ bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out IndirectReservo
     resv = tempIndirectResv[pidx];
     return true;
 }
-bool mergeSpatialNeighbors(vec3 norm, float depth, uint matId, out IndirectReservoir resv) {
+
+bool mergeSpatialNeighbors(State state, GISample rSample, float depth, uint matId, out IndirectReservoir resv) {
     bool valid = false;
     resvReset(resv);
+    uint Z = 0;
+
     for (int i = 0; i < 5; i++) {
         IndirectReservoir spatial;
-        if (findSpatialNeighbor(norm, depth, matId, spatial)) {
+        if (findSpatialNeighbor(rSample.nv, depth, matId, spatial)) {
             if (!resvInvalid(spatial)) {
-                resvMerge(resv, spatial, rand(prd.seed));
+                GISample qSample = spatial.giSample;
+                vec3 rWi = qSample.xs - rSample.xv;
+                vec3 qWi = qSample.xs - qSample.xv;
+                float jacobian = absDot(qSample.ns, normalize(rWi)) / absDot(qSample.ns, normalize(qWi)) *
+                    dot(qWi, qWi) / dot(rWi, rWi);
+                float pHat = resvToScalar(qSample.L) * jacobian;
+                //resvMerge(resv, spatial, rand(prd.seed));
+                if (isnan(pHat) || pHat < 0) {
+                    pHat = 0;
+                }
+                resvMerge(resv, spatial, pHat, rand(prd.seed));
                 valid = true;
             }
         }
     }
     return valid;
-}
-
-float pHatIndirect(GISample giSample, State state, vec3 wo) {
-    return resvToScalar(giSample.L);
-
-    vec3 wi = normalize(giSample.xs - giSample.xv);
-    return resvToScalar(giSample.L * BSDF(state, wo, state.ffnormal, wi) * satDot(giSample.nv, wi));
-}
-
-float bigWIndirect(IndirectReservoir resv, State state, vec3 wo) {
-    return resv.weight / (pHatIndirect(resv.giSample, state, wo) * float(resv.num));
 }
 
 GISample newGISample() {
@@ -210,20 +227,21 @@ void cacheTempReservoir(IndirectReservoir resv) {
     tempIndirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
 }
 
-vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
+void pathTraceIndirect(
+    State state, Ray ray,
+    out float primSamplePdf, out vec3 primWo, out State primState, out GISample giSample
+) {
     vec3 throughput = vec3(1.0);
-    float primSamplePdf;
-    vec3 primWo = -ray.direction;
-    State primState = state;
+    primWo = -ray.direction;
+    primState = state;
+    giSample = newGISample();
 
-    GISample giSample = newGISample();
+    state.mat.albedo = vec3(1.0);
 
-    // path tracing
     for (int depth = 1; depth <= rtxState.maxDepth; depth++) {
         vec3 wo = -ray.direction;
 
-        // add direct lighting
-        if (depth > 1) {
+        if (depth > 1 && rtxState.MIS > 0) {
             vec3 Li, wi;
             float lightPdf = SampleDirectLight(state, Li, wi);
 
@@ -270,9 +288,6 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
             //     giSample.xs = state.position + sampleWi * INFINITY * 0.8;
             //     giSample.ns = -sampleWi;
             // }
-            // if (depth == 2) {
-            //     giSample.ws = sampleWi;
-            // }
             break;
         }
 
@@ -290,9 +305,6 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
             //     giSample.xs = state.position;
             //     giSample.ns = state.ffnormal;
             // }
-            // if (depth == 2) {
-            //     giSample.ws = sampleWi;
-            // }
             break;
         }
 
@@ -300,9 +312,6 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
             giSample.xs = state.position;
             giSample.ns = state.ffnormal;
         }
-        // if (depth == 2) {
-        //     giSample.ws = sampleWi;
-        // }
 
 #ifdef RR
         float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
@@ -312,9 +321,18 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         throughput /= rrPcont;
 #endif
     }
+}
+
+vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primState, GISample giSample) {
+    vec3 indirect = vec3(0.0);
 
     IndirectReservoir resv;
-    resvReset(resv);
+    // temporal reuse
+    if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
+        float reprojDepth = length(sceneCamera.lastPosition - primState.position);
+        ivec2 motionIdx = imageLoad(motionVector, imageCoords).xy;
+        findTemporalNeighbor(primState.ffnormal, dist, reprojDepth, primState.matID, motionIdx, resv);
+    }
 
     float sampleWeight = 0.0;
     if (GISampleValid(giSample)) {
@@ -323,62 +341,13 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         if (isnan(sampleWeight) || sampleWeight < 0.0) {
             sampleWeight = 0.0;
         }
-        // giSample.matInfo = encodeMaterialInfo(state);
     }
     resvUpdate(resv, giSample, sampleWeight, rand(prd.seed));
 
-    // temporal reuse
-    if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
-        float reprojDepth = length(sceneCamera.lastPosition - primState.position);
-        ivec2 motionIdx = imageLoad(motionVector, imageCoords).xy;
-
-        IndirectReservoir temporal;
-        if (findTemporalNeighbor(primState.ffnormal, dist, reprojDepth, primState.matID, motionIdx, temporal)) {
-            if (!resvInvalid(temporal)) {
-                resvMerge(resv, temporal, rand(prd.seed));
-            }
-        }
-    }
-
-    vec3 indirect = vec3(0.0);
-
-    // store the reservoir before spatial reuse
     resvCheckValidity(resv);
-    resvClamp(resv, rtxState.RISSampleNum * rtxState.reservoirClamp);
+    resvClamp(resv, rtxState.reservoirClamp / 2);
     saveNewReservoir(resv);
-
-    // spatial reuse
-    if (rtxState.ReSTIRState == eSpatial || rtxState.ReSTIRState == eSpatiotemporal) {
-        IndirectReservoir spatial;
-        resvReset(spatial);
-
-        barrier();
-        cacheTempReservoir(resv);
-        barrier();
-
-        IndirectReservoir spatialAggregate;
-        if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
-            if (!resvInvalid(spatialAggregate)) {
-                resvMerge(spatial, spatialAggregate, rand(prd.seed));
-            }
-        }
-        barrier();
-        resvCheckValidity(resv);
-        cacheTempReservoir(resv);
-        barrier();
-
-        if (mergeSpatialNeighbors(primState.ffnormal, dist, primState.matID, spatialAggregate)) {
-            if (!resvInvalid(spatialAggregate)) {
-                resvMerge(spatial, spatialAggregate, rand(prd.seed));
-            }
-        }
-
-        if (!resvInvalid(spatial)) {
-            //resvClamp(spatial, 128);
-            resvMerge(resv, spatial, rand(prd.seed));
-        }
-    }
-
+   
     giSample = resv.giSample;
     if (!resvInvalid(resv) && GISampleValid(giSample)) {
         vec3 primWi = normalize(giSample.xs - giSample.xv);
@@ -386,20 +355,10 @@ vec3 ReSTIRIndirect(State state, Ray ray, float dist) {
         indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi) * satDot(giSample.nv, primWi) *
             bigWIndirect(resv, primState, primWo);
             */
-        // if (giSample.matInfo.x != 0xFFFFFFFF){
-        //     state.position = giSample.xs;
-        //     state.normal = giSample.ns;
-        //     state.ffnormal = dot(state.normal, primWi) <= 0.0 ? state.normal : -state.normal;
-        //     state.mat.albedo = unpackUnorm4x8(giSample.matInfo.x).xyz;
-        //     vec4 matInfo = unpackUnorm4x8(giSample.matInfo.y);
-        //     state.mat.metallic = matInfo.x;
-        //     state.mat.roughness = matInfo.y;
-        //     state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
-        //     state.mat.transmission = matInfo.w;
-        //     giSample.L *= BSDF(state, -primWi, state.ffnormal, giSample.ws) * absDot(giSample.ns, giSample.ws);
-        // }
         indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
-        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
+        vec3 albedo = primState.mat.albedo;
+        primState.mat.albedo = vec3(1.0);
+        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi) * albedo;
     }
 
     if (hasNan(indirect)) {
@@ -426,7 +385,10 @@ void main() {
   }
   //state.position = OffsetRay(state.position, state.ffnormal);
 
-  vec3 pixelColor = ReSTIRIndirect(state, ray, depth);
+  float primSamplePdf; vec3 primWo; State primState; GISample giSample;
+
+  pathTraceIndirect(state, ray, primSamplePdf, primWo, primState, giSample);
+  vec3 pixelColor = ReSTIRIndirect(depth, primSamplePdf, primWo, primState, giSample);
   pixelColor = clampRadiance(pixelColor);
 
   if(rtxState.frame > 0) {

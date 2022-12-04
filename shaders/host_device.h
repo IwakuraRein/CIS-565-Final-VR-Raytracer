@@ -121,10 +121,11 @@ END_ENUM();
 // clang-format on
 
 START_ENUM(ReSTIRState)
-eRIS = 0,
-eSpatial = 1,
-eTemporal = 2,
-eSpatiotemporal = 3
+eNone = 0,
+eRIS = 1,
+eSpatial = 2,
+eTemporal = 3,
+eSpatiotemporal = 4
 END_ENUM();
 
 // Camera of the scene
@@ -251,6 +252,7 @@ struct IndirectReservoir {
 	GISample giSample;
 	uint	 num;
 	float weight;
+	float bigW;
 };
 
 // acceleration structure for importance sampling - pre-computed

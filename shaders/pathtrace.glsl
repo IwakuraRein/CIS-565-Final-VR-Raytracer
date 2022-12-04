@@ -451,6 +451,19 @@ void loadLastGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, o
     matHash = gInfo.w & 0xFF000000;
 }
 
+void loadThisGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth) {
+    uvec2 gInfo = imageLoad(thisGbuffer, imageCoords).xy;
+    normal = decompress_unit_vec(gInfo.y);
+    depth = uintBitsToFloat(gInfo.x);
+}
+
+void loadThisGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, out uint matHash) {
+    uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
+    normal = decompress_unit_vec(gInfo.y);
+    depth = uintBitsToFloat(gInfo.x);
+    matHash = gInfo.w & 0xFF000000;
+}
+
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
@@ -458,7 +471,7 @@ Ray raySpawn(ivec2 imageCoords, ivec2 sizeImage) {
     // vec2 subpixel_jitter = rtxState.frame == 0 ? vec2(0.5f, 0.5f) : vec2(rand(prd.seed), rand(prd.seed));
 
     // Compute sampling position between [-1 .. 1]
-    const vec2 pixelCenter = vec2(imageCoords)/* + subpixel_jitter*/;
+    const vec2 pixelCenter = vec2(imageCoords) + 0.5;
     const vec2 inUV = pixelCenter / vec2(sizeImage.xy);
     vec2 d = inUV * 2.0 - 1.0;
 

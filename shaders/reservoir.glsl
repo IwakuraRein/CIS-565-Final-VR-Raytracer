@@ -16,6 +16,11 @@ void resvReset(inout DirectReservoir resv) {
 void resvReset(inout IndirectReservoir resv) {
     resv.num = 0;
     resv.weight = 0;
+    resv.bigW = 0;
+}
+
+void resvUpdateBigW(inout IndirectReservoir resv, float pHat) {
+    resv.bigW = resv.weight / (float(resv.num) * pHat);
 }
 
 bool resvInvalid(DirectReservoir resv) {
@@ -52,6 +57,12 @@ void resvUpdate(inout IndirectReservoir resv, GISample newSample, float newWeigh
     if (r * resv.weight < newWeight) {
         resv.giSample = newSample;
     }
+}
+
+void resvMerge(inout IndirectReservoir resv, IndirectReservoir rhs, float pHat, float r) {
+    uint num = resv.num;
+    resvUpdate(resv, rhs.giSample, pHat * rhs.bigW * float(rhs.num), r);
+    resv.num = num + rhs.num;
 }
 
 void resvMerge(inout DirectReservoir resv, DirectReservoir rhs, float r) {

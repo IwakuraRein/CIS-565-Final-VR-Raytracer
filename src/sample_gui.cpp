@@ -139,11 +139,9 @@ bool SampleGUI::guiRayTracing()
 			"Depth",
 			"Metallic",
 			"Emissive",
-			//"Alpha",
 			"Roughness",
 			"TexCoord",
-			//"Tangent",
-			// "HeatMap",
+			"Custom",
 		});
 	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
 
@@ -159,7 +157,7 @@ bool SampleGUI::guiRayTracing()
 
 	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.ReSTIRState, nullptr, Normal,
 		{
-			//"None",
+			"None",
 			"RIS",
 			"Spatial",
 			"Temporal",
@@ -169,18 +167,21 @@ bool SampleGUI::guiRayTracing()
 	changed |= GuiH::Slider("RIS Sample Num", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
 	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1600);
 
-	GuiH::Group<bool>("Direct Light", false, [&] {
+	GuiH::Group<bool>("Direct Light", true, [&] {
 		changed |= GuiH::Slider("Environment Weight",
 			"If there is a environment map, the probability it will be used in direct light sampling",
 			&rtxState.environmentProb, nullptr, Normal, 0.f, 1.f);
 		return changed;
 		});
-	GuiH::Group<bool>("Indirect Light", false, [&] {
+	GuiH::Group<bool>("Indirect Light", true, [&] {
 		//changed |= GuiH::Slider("Sample Rate",
 		//	"Samples per pixel",
 		//	&rtxState.spp, nullptr, Normal, 0, 16);
 		changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
-		changed |= GuiH::Checkbox("MIS", "", (bool*)&rtxState.MIS);
+
+		bool mis = rtxState.MIS;
+		changed |= GuiH::Checkbox("MIS", "", &mis);
+		rtxState.MIS = mis;
 		return changed;
 		});
 	return changed;

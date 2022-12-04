@@ -162,8 +162,8 @@ public:
 		0.25f,   //environmentProb
 		0,       //time
 
-		2,       // ReSTIRState
-		4,       // RISSampleNum
+		eTemporal,       // ReSTIRState
+		4,		// RISSampleNum
 		80,      // clamp
 		0,       // accumulate
 
