@@ -90,8 +90,11 @@ bool findTemporalNeighbor(
     vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, out DirectReservoir resv
 ) {
     vec3 pnorm; float pdepth; uint matHash;
+    
+    if (!inBound(lastCoord, ivec2(2, 0), rtxState.size)) {
+        return false;
+    }
     loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
-
     if (inBound(lastCoord, rtxState.size)) {
         if (hash8bit(matId) == matHash) {
             if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
@@ -103,18 +106,18 @@ bool findTemporalNeighbor(
     /*
     for (int i = -1; i <= 1; i++) {
         for (int j = -1; j <= 1; j++) {
-            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
+            ivec2 coord = iLastCoord + ivec2(i, j);
             loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
-            if (coord.x < 0 || coord.x >= rtxState.size.x ||
-                coord.y < 0 || coord.y >= rtxState.size.y) {
+            if (!inBound(coord, ivec2(2, 0), rtxState.size)) {
                 continue;
             }
             else if (hash8bit(matId) != matHash)
                 continue;
-            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+            else if (dot(norm, pnorm) < 0.9 || reprojDepth > pdepth * 1.05) {
                 continue;
             }
             resv = lastDirectResv[coord.y * rtxState.size.x + coord.x];
+            //resv = lastDirectResv[iLastCoord.y * rtxState.size.x + iLastCoord.x];
             return true;
         }
     }
@@ -186,6 +189,7 @@ float BigWDirect(DirectReservoir resv, State state, vec3 wo) {
     return resv.weight / (resvToScalar(PHatDirect(resv, state, wo)) * float(resv.num));
 }
 
+/*
 vec3 DirectSample(Ray r) {
     int idx = imageCoords.y * rtxState.size.x + imageCoords.x;
     uvec4 gInfo;
@@ -341,6 +345,7 @@ vec3 DirectSample(Ray r) {
     }
     return state.mat.emission + direct * albedo;
 }
+*/
 
 vec3 ReSTIRDirect(Ray r) {
     int index = imageCoords.y * rtxState.size.x + imageCoords.x;
@@ -367,7 +372,6 @@ vec3 ReSTIRDirect(Ray r) {
     if (state.isEmitter) {
         return state.mat.emission;
     }
-    //return vec3(0.0);
 
     vec3 wo = -r.direction;
     vec3 direct = vec3(0.0);
@@ -469,7 +473,7 @@ void main() {
   
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-    
+
   //vec3 radiance = DirectSample(ray);
   vec3 radiance = ReSTIRDirect(ray);
   vec3 pixelColor = clampRadiance(radiance);

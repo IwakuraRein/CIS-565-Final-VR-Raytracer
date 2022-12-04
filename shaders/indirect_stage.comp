@@ -40,8 +40,6 @@
 
 #include "host_device.h"
 
-//#define BLOCKWISE_RR
-
 layout(push_constant) uniform _RtxState {
   RtxState rtxState;
 };
@@ -60,6 +58,8 @@ ivec2 imageCoords;
 #include "pathtrace.glsl"
 
 #define FIREFLIES 1
+#define TILED_MULTIBOUNCE 1
+#define FETCH_GEOM_CHECK_4_SUBPIXELS 1
 
 #ifndef SWIZZLED
 layout(local_size_x = 8, local_size_y = 8) in;
@@ -78,8 +78,21 @@ ivec2 SampleSizzled() {
 }
 #endif
 
+#if TILED_MULTIBOUNCE
+shared bool multiBounce;
+#else
+const bool multiBounce = true;
+#endif
+
+const float MultiBounceProb = 0.25;
+
+ivec2 indSize() {
+    return rtxState.size / 2;
+}
+
+#if !FETCH_GEOM_CHECK_4_SUBPIXELS
 bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
-  uvec4 gInfo = imageLoad(thisGbuffer, imageCoords);
+  uvec4 gInfo = imageLoad(thisGbuffer, imageCoords * 2);
   depth = uintBitsToFloat(gInfo.x);
   if(depth >= INFINITY - EPS * 10.0)
     return false;
@@ -97,7 +110,54 @@ bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
   state.matID = gInfo.w >> 24; // hashed matarial id
   return true;
 }
+#else
+bool getStateFromGbuffer(Ray ray, out State state, out float depth) {
+  uvec4 gInfo00 = imageLoad(thisGbuffer, imageCoords * 2 + ivec2(0, 0));
+  uvec4 gInfo10 = imageLoad(thisGbuffer, imageCoords * 2 + ivec2(1, 0));
+  uvec4 gInfo11 = imageLoad(thisGbuffer, imageCoords * 2 + ivec2(1, 1));
+  uvec4 gInfo01 = imageLoad(thisGbuffer, imageCoords * 2 + ivec2(0, 1));
 
+  depth = (uintBitsToFloat(gInfo00.x) + uintBitsToFloat(gInfo10.x) + uintBitsToFloat(gInfo11.x) +
+    uintBitsToFloat(gInfo01.x)) * 0.25;
+
+  if(depth >= INFINITY - EPS * 10.0)
+    return false;
+
+  state.position = ray.origin + ray.direction * depth;
+  state.normal = (decompress_unit_vec(gInfo00.y) + decompress_unit_vec(gInfo10.y) + decompress_unit_vec(gInfo11.y) +
+    decompress_unit_vec(gInfo01.y)) * 0.25;
+  state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+
+  // Filling material structures
+  state.mat.albedo = (unpackUnorm4x8(gInfo00.w).xyz + unpackUnorm4x8(gInfo10.w).xyz +
+    unpackUnorm4x8(gInfo11.w).xyz + unpackUnorm4x8(gInfo01.w).xyz) * 0.25;
+
+  vec4 matInfo00 = unpackUnorm4x8(gInfo00.z);
+  vec4 matInfo10 = unpackUnorm4x8(gInfo10.z);
+  vec4 matInfo11 = unpackUnorm4x8(gInfo11.z);
+  vec4 matInfo01 = unpackUnorm4x8(gInfo01.z);
+
+  state.mat.metallic = (matInfo00.x + matInfo10.x + matInfo11.x + matInfo01.x) * 0.25;
+  state.mat.roughness = (matInfo00.y + matInfo10.y + matInfo11.y + matInfo01.y) * 0.25;
+  state.mat.ior = (matInfo00.z + matInfo10.z + matInfo11.z + matInfo01.z) * 0.25 * MAX_IOR_MINUS_ONE + 1.f;
+  state.mat.transmission = (matInfo00.w + matInfo01.w + matInfo11.w + matInfo10.w) * 0.25;
+
+  float r = rand(prd.seed);
+  if (r < 0.25) {
+    state.matID = gInfo00.w >> 24;
+  }
+  else if (r < 0.5) {
+    state.matID = gInfo10.w >> 24;
+  }
+  else if (r < 0.75) {
+    state.matID = gInfo11.w >> 24;
+  }
+  else {
+    state.matID = gInfo01.w >> 24;
+  }
+  return true;
+}
+#endif
 uvec2 encodeMaterialInfo(State state) {
     uvec2 matInfo;
     matInfo.x = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
@@ -125,32 +185,30 @@ bool findTemporalNeighbor(
     vec3 norm, float depth, float reprojDepth, uint matId, ivec2 lastCoord, inout IndirectReservoir resv
 ) {
     vec3 pnorm; float pdepth; uint matHash;
+    
     loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
-
     if (inBound(lastCoord, rtxState.size)) {
         if (hash8bit(matId) == matHash) {
             if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
-                resv = lastIndirectResv[lastCoord.y * rtxState.size.x + lastCoord.x];
+                resv = lastIndirectResv[(lastCoord.y / 2) * indSize().x + (lastCoord.x / 2)];
                 return true;
             }
         }
     }
-
     /*
     for (int i = -1; i <= 1; i++) {
         for (int j = -1; j <= 1; j++) {
             ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
             loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
-            if (coord.x < 0 || coord.x >= rtxState.size.x ||
-                coord.y < 0 || coord.y >= rtxState.size.y) {
+            if (!inBound(coord, indSize())) {
                 continue;
             }
             else if (hash8bit(matId) != matHash)
                 continue;
-            else if (dot(norm, pnorm) < 0.9 || reprojDepth  > pdepth * 1.05) {
+            else if (dot(norm, pnorm) < 0.5 || reprojDepth  > pdepth * 1.05) {
                 continue;
             }
-            resv = lastIndirectResv[coord.y * rtxState.size.x + coord.x];
+            resv = lastIndirectResv[coord.y * indSize().x + coord.x];
             return true;
         }
     }
@@ -170,18 +228,18 @@ bool GISampleValid(GISample giSample) {
 }
 
 void saveNewReservoir(IndirectReservoir resv) {
-    thisIndirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
+    thisIndirectResv[imageCoords.y * indSize().x + imageCoords.x] = resv;
 }
 
 void cacheTempReservoir(IndirectReservoir resv) {
-    tempIndirectResv[imageCoords.y * rtxState.size.x + imageCoords.x] = resv;
+    tempIndirectResv[imageCoords.y * indSize().x + imageCoords.x] = resv;
 }
 
 void pathTraceIndirect(
     State state, Ray ray,
     out float primSamplePdf, out vec3 primWo, out State primState, out GISample giSample
 ) {
-    vec3 throughput = vec3(1.0);
+    vec3 throughput = vec3(multiBounce ? 4.0 : 1.0);
     primWo = -ray.direction;
     primState = state;
     giSample = newGISample();
@@ -212,6 +270,9 @@ void pathTraceIndirect(
         }
 
         if (depth > 1) {
+            if (!multiBounce) {
+                return;
+            }
             throughput *= sampleBSDF / samplePdf * absDot(state.ffnormal, sampleWi);
         }
         else {
@@ -263,7 +324,7 @@ void pathTraceIndirect(
             giSample.ns = state.ffnormal;
         }
 
-#ifdef RR
+#ifndef RR
         float rrPcont = (1 >= RR_DEPTH) ? min(max(throughput.x, max(throughput.y, throughput.z)) * state.eta * state.eta + 0.001, 0.95) : 1.0;
         if (rand(prd.seed) >= rrPcont) {
             break;
@@ -277,10 +338,11 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
     vec3 indirect = vec3(0.0);
 
     IndirectReservoir resv;
+    resvReset(resv);
     // temporal reuse
     if (rtxState.ReSTIRState == eTemporal || rtxState.ReSTIRState == eSpatiotemporal) {
         float reprojDepth = length(sceneCamera.lastPosition - primState.position);
-        ivec2 motionIdx = imageLoad(motionVector, imageCoords).xy;
+        ivec2 motionIdx = imageLoad(motionVector, imageCoords * 2).xy;
         findTemporalNeighbor(primState.ffnormal, dist, reprojDepth, primState.matID, motionIdx, resv);
     }
 
@@ -318,14 +380,21 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
 }
 
 void main() {
-  ivec2 imageRes = rtxState.size;
   imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  ivec2 imageRes = indSize();
   if (imageCoords.x >= imageRes.x || imageCoords.y >= imageRes.y) {
     return;
   }
 
-  prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
+  prd.seed = tea(indSize().x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   Ray ray = raySpawn(imageCoords, imageRes);
+
+#if TILED_MULTIBOUNCE
+  if (gl_LocalInvocationIndex == 0) {
+    multiBounce = rand(prd.seed) < MultiBounceProb;
+  }
+  barrier();
+#endif
 
   State state;
   float depth;
@@ -333,7 +402,11 @@ void main() {
     imageStore(thisIndirectResultImage, imageCoords, vec4(0.0));
     return;
   }
-  //state.position = OffsetRay(state.position, state.ffnormal);
+#if FETCH_GEOM_CHECK_4_SUBPIXELS
+  state.position += state.ffnormal * 1e-3;
+#else
+  state.position += state.ffnormal * 1e-2;
+#endif
 
   float primSamplePdf; vec3 primWo; State primState; GISample giSample;
 
@@ -341,6 +414,18 @@ void main() {
   vec3 pixelColor = ReSTIRIndirect(depth, primSamplePdf, primWo, primState, giSample);
   pixelColor = clampRadiance(pixelColor);
 
+  ivec2 motionIdx = imageLoad(motionVector, imageCoords * 2).xy;
+  vec3 lastColor;
+  if (inBound(motionIdx, rtxState.size)) {
+    lastColor = imageLoad(lastIndirectResultImage, motionIdx / 2).rgb;
+  }
+  else {
+    lastColor = pixelColor;
+  }
+
+  imageStore(thisIndirectResultImage, imageCoords, vec4(mix(lastColor, pixelColor, 0.125), 1.0));
+
+  /*
   if(rtxState.frame > 0) {
     vec3 old_color = imageLoad(lastIndirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
@@ -353,4 +438,5 @@ void main() {
   } else {
     imageStore(thisIndirectResultImage, imageCoords, vec4(pixelColor, 0));
   }
+  */
 }

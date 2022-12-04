@@ -24,7 +24,6 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-
 #ifdef __cplusplus
 #include <stdint.h>
 #include "nvmath/nvmath.h"

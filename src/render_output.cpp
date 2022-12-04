@@ -103,30 +103,37 @@ void RenderOutput::createOffscreenRender(const VkExtent2D& size)
   {
     auto colorCreateInfo = nvvk::makeImage2DCreateInfo(
         size, m_offscreenColorFormat,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true
+    );
 
     nvvk::Image directImage1 = m_pAlloc->createImage(colorCreateInfo);
     NAME_VK(directImage1.image);
     nvvk::Image directImage2 = m_pAlloc->createImage(colorCreateInfo);
     NAME_VK(directImage2.image);
+    VkImageViewCreateInfo ivInfo1 = nvvk::makeImageViewCreateInfo(directImage1.image, colorCreateInfo);
+    VkImageViewCreateInfo ivInfo2 = nvvk::makeImageViewCreateInfo(directImage2.image, colorCreateInfo);
+
+    VkExtent2D indSize{ size.width / 2, size.height / 2 };
+    colorCreateInfo = nvvk::makeImage2DCreateInfo(
+        indSize, m_offscreenColorFormat,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true
+    );
     nvvk::Image inDirectImage1 = m_pAlloc->createImage(colorCreateInfo);
     NAME_VK(inDirectImage1.image);
     nvvk::Image inDirectImage2 = m_pAlloc->createImage(colorCreateInfo);
     NAME_VK(inDirectImage2.image);
-    VkImageViewCreateInfo ivInfo1 = nvvk::makeImageViewCreateInfo(directImage1.image, colorCreateInfo);
-    VkImageViewCreateInfo ivInfo2 = nvvk::makeImageViewCreateInfo(directImage2.image, colorCreateInfo);
     VkImageViewCreateInfo ivInfo3 = nvvk::makeImageViewCreateInfo(inDirectImage1.image, colorCreateInfo);
     VkImageViewCreateInfo ivInfo4 = nvvk::makeImageViewCreateInfo(inDirectImage2.image, colorCreateInfo);
 
     VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-    sampler.maxLod                          = FLT_MAX;
+    sampler.maxLod                             = FLT_MAX;
     m_directResult[0]                          = m_pAlloc->createTexture(directImage1, ivInfo1, sampler);
     m_directResult[1]                          = m_pAlloc->createTexture(directImage2, ivInfo2, sampler);
     m_indirectResult[0]                        = m_pAlloc->createTexture(inDirectImage1, ivInfo3, sampler);
     m_indirectResult[1]                        = m_pAlloc->createTexture(inDirectImage2, ivInfo4, sampler);
-    m_directResult[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    m_directResult[0].descriptor.imageLayout   = VK_IMAGE_LAYOUT_GENERAL;
+    m_directResult[1].descriptor.imageLayout   = VK_IMAGE_LAYOUT_GENERAL;
     m_indirectResult[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    m_directResult[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     m_indirectResult[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
   }
 
@@ -205,24 +212,16 @@ void RenderOutput::createPostDescriptor()
   m_postDescSet[1]    = nvvk::allocateDescriptorSet(m_device, m_postDescPool, m_postDescSetLayout);
 
   std::vector<VkWriteDescriptorSet> writes;
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eDirectSampler, &m_directResult[0].descriptor));  // This is use by the tonemapper
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eIndirectSampler, &m_indirectResult[0].descriptor));  // This is use by the tonemapper
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eThisDirectResult, &m_directResult[0].descriptor));  // This will be used by the ray trace to write the image
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eLastDirectResult, &m_directResult[1].descriptor));  // This will be used by the ray trace to write the image
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eThisIndirectResult, &m_indirectResult[0].descriptor));  // This will be used by the ray trace to write the image
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[0], OutputBindings::eLastIndirectResult, &m_indirectResult[1].descriptor));  // This will be used by the ray trace to write the image
+  for (int i = 0; i < 2; i++) {
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eDirectSampler, &m_directResult[i].descriptor));  // This is use by the tonemapper
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eIndirectSampler, &m_indirectResult[i].descriptor));  // This is use by the tonemapper
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisDirectResult, &m_directResult[i].descriptor));  // This will be used by the ray trace to write the image
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastDirectResult, &m_directResult[!i].descriptor));  // This will be used by the ray trace to write the image
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisIndirectResult, &m_indirectResult[i].descriptor));  // This will be used by the ray trace to write the image
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastIndirectResult, &m_indirectResult[!i].descriptor));  // This will be used by the ray trace to write the image
 
-  vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-
-  writes.clear();
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eDirectSampler, &m_directResult[1].descriptor));
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eIndirectSampler, &m_indirectResult[1].descriptor)); 
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eThisDirectResult, &m_directResult[1].descriptor));  
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eLastDirectResult, &m_directResult[0].descriptor));  
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eThisIndirectResult, &m_indirectResult[1].descriptor)); 
-  writes.emplace_back(m_bind.makeWrite(m_postDescSet[1], OutputBindings::eLastIndirectResult, &m_indirectResult[0].descriptor)); 
-
-  vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+      vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -249,13 +248,14 @@ void RenderOutput::run(VkCommandBuffer cmdBuf, const RtxState& state, float zoom
 //
 void RenderOutput::genMipmap(VkCommandBuffer cmdBuf)
 {
+    VkExtent2D indSize{ m_size.width / 2, m_size.height / 2 };
   LABEL_SCOPE_VK(cmdBuf);
   nvvk::cmdGenerateMipmaps(cmdBuf, m_directResult[0].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
-                           VK_IMAGE_LAYOUT_GENERAL);
-  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[0].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
-                           VK_IMAGE_LAYOUT_GENERAL);
+      VK_IMAGE_LAYOUT_GENERAL);
   nvvk::cmdGenerateMipmaps(cmdBuf, m_directResult[1].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
-                           VK_IMAGE_LAYOUT_GENERAL);
-  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[1].image, m_offscreenColorFormat, m_size, nvvk::mipLevels(m_size), 1,
-                           VK_IMAGE_LAYOUT_GENERAL);
+      VK_IMAGE_LAYOUT_GENERAL);
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[0].image, m_offscreenColorFormat, indSize, nvvk::mipLevels(indSize), 1,
+      VK_IMAGE_LAYOUT_GENERAL);
+  nvvk::cmdGenerateMipmaps(cmdBuf, m_indirectResult[1].image, m_offscreenColorFormat, indSize, nvvk::mipLevels(indSize), 1,
+      VK_IMAGE_LAYOUT_GENERAL);
 }

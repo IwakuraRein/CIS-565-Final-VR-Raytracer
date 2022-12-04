@@ -183,8 +183,12 @@ bool hasNan(vec3 v) {
     return isnan(v.x) || isnan(v.y) || isnan(v.z);
 }
 
+bool inBound(ivec2 p, ivec2 pMin, ivec2 pMax) {
+    return p.x >= pMin.x && p.x < pMax.x && p.y >= pMin.y && p.y < pMax.y;
+}
+
 bool inBound(ivec2 p, ivec2 bound) {
-    return p.x >= 0 && p.x < bound.x && p.y >= 0 && p.y < bound.y;
+    return inBound(p, ivec2(0, 0), bound);
 }
 
 #endif  // RAYCOMMON_GLSL

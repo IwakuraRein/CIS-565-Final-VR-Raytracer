@@ -137,8 +137,9 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 
+	ivec2 indSize = state.size / 2;
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
-	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+	vkCmdDispatch(cmdBuf, (indSize[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (indSize[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 }
 
 // handle window resize
@@ -161,7 +162,7 @@ void Renderer::update(const VkExtent2D& size) {
 void Renderer::createBuffer()
 {
 	VkDeviceSize directSize = m_size.width * m_size.height * sizeof(DirectReservoir);
-	VkDeviceSize indirectSize = m_size.width * m_size.height * sizeof(IndirectReservoir);
+	VkDeviceSize indirectSize = (m_size.width / 2) * (m_size.height / 2) * sizeof(IndirectReservoir);
 	for (int i = 0; i < 2; i++) {
 		m_directReservoir[i] = m_pAlloc->createBuffer(directSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		m_indirectReservoir[i] = m_pAlloc->createBuffer(indirectSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -246,7 +247,7 @@ void Renderer::createDescriptorSet()
 void Renderer::updateDescriptorSet() {
 	std::array<VkWriteDescriptorSet, 9> writes;
 	VkDeviceSize directResvSize = m_size.width * m_size.height * sizeof(DirectReservoir);
-	VkDeviceSize indirectResvSize = m_size.width * m_size.height * sizeof(IndirectReservoir);
+	VkDeviceSize indirectResvSize = (m_size.width / 2) * (m_size.height / 2) * sizeof(IndirectReservoir);
 
 	for (int i = 0; i < 2; i++) {
 		VkDescriptorBufferInfo lastDirectResvBufInfo = { m_directReservoir[i].buffer, 0, directResvSize };

@@ -779,11 +779,12 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	const float aspectRatio = size.width / (float)size.height;
 	static nvmath::vec3f eye{ 0.f,0.f,0.f }, center, up;
 
-	vec2 jitter{ (nvmath::nv_random<float>() * 0.5f) / size.width, (nvmath::nv_random<float>() * 0.5f) / size.height };
+	//vec2 jitter{ (nvmath::nv_random<float>() * 0.5f) / size.width, (nvmath::nv_random<float>() * 0.5f) / size.height };
+	vec2 jitter(.5f / size.width, .5f / size.height);
 	const auto view = CameraManip.getMatrix();
 	auto proj = nvmath::perspectiveVK(CameraManip.getFov(), aspectRatio, CAMERA_NEAR, CAMERA_FAR);
-	//proj.a02 += jitter.x;
-	//proj.a12 += jitter.y;
+	proj.a02 += jitter.x;
+	proj.a12 += jitter.y;
 	m_camera.lastProjView = m_camera.projView;
 	m_camera.lastView = nvmath::invert(m_camera.viewInverse);
 	m_camera.viewInverse = nvmath::invert(view);
