@@ -158,56 +158,6 @@ bool findTemporalNeighbor(
     return false;
 }
 
-bool findSpatialNeighbor(vec3 norm, float depth, uint matId, out IndirectReservoir resv) {
-    const float Radius = 30.0;
-
-    vec2 p = toConcentricDisk(vec2(rand(prd.seed), rand(prd.seed)));
-    int px = int(float(imageCoords.x + p.x) + 0.5);
-    int py = int(float(imageCoords.y + p.y) + 0.5);
-    int pidx = py * rtxState.size.x + px;
-
-    vec3 pnorm; float pdepth; uint matHash;
-    loadThisGeometryInfo(imageCoords, pnorm, pdepth, matHash);
-
-    if (inBound(ivec2(px, py), rtxState.size)) {
-        return false;
-    }
-    else if (hash8bit(matId) != matHash)
-        return false;
-    else if (dot(norm, pnorm) < 0.9 || depth > pdepth * 1.05) {
-        return false;
-    }
-    resv = tempIndirectResv[pidx];
-    return true;
-}
-
-bool mergeSpatialNeighbors(State state, GISample rSample, float depth, uint matId, out IndirectReservoir resv) {
-    bool valid = false;
-    resvReset(resv);
-    uint Z = 0;
-
-    for (int i = 0; i < 5; i++) {
-        IndirectReservoir spatial;
-        if (findSpatialNeighbor(rSample.nv, depth, matId, spatial)) {
-            if (!resvInvalid(spatial)) {
-                GISample qSample = spatial.giSample;
-                vec3 rWi = qSample.xs - rSample.xv;
-                vec3 qWi = qSample.xs - qSample.xv;
-                float jacobian = absDot(qSample.ns, normalize(rWi)) / absDot(qSample.ns, normalize(qWi)) *
-                    dot(qWi, qWi) / dot(rWi, rWi);
-                float pHat = resvToScalar(qSample.L) * jacobian;
-                //resvMerge(resv, spatial, rand(prd.seed));
-                if (isnan(pHat) || pHat < 0) {
-                    pHat = 0;
-                }
-                resvMerge(resv, spatial, pHat, rand(prd.seed));
-                valid = true;
-            }
-        }
-    }
-    return valid;
-}
-
 GISample newGISample() {
     GISample giSample;
     giSample.nv = vec3(100.0);
