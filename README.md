@@ -11,6 +11,18 @@
 
 ![](./images/bistro_ext.jpg)
 
+**University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project ](https://cis565-fall-2022.github.io/)**
+
+A Vulkan Real-time Ray Tracer with Texture-Driven Geometry based on [Vk Raytrace](https://github.com/nvpro-samples/vk_raytrace) by: 
+
+**Chang Liu ([LinkedIn](https://www.linkedin.com/in/chang-liu-0451a6208/) | [Personal Website](https://hummawhite.github.io/)), Alex Fu ( [LinkedIn](https://www.linkedin.com/in/alex-fu-b47b67238/) |  [Personal Website](https://thecger.com/)) and Yilin Liu ( [LinkedIn](https://www.linkedin.com/in/yilin-liu-9538ba1a5/) |  [Personal Website](https://yilin.games/))**
+
+**Tested on a personal laptop: i7-12700 @ 4.90GHz with 16GB RAM, RTX 3070 Ti Laptop 8GB**
+  
+![](images/teaser.png)
+
+![](videos/gi_demo_trim.mp4)
+
 
 ## Features
 
@@ -30,8 +42,6 @@
 - [*Milestone 3*](#)
 
 ## Introduction
-
-
 
 ## Pipeline
 
