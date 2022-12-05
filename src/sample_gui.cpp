@@ -188,9 +188,14 @@ bool SampleGUI::guiRayTracing()
 	GuiH::Group<bool>("Denoiser", true, [&] {
 		bool denoise = rtxState.denoise;
 		changed |= GuiH::Checkbox("Enable", "", &denoise);
-		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLumin, nullptr, Normal, 1e-3f, 100.f);
-		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormal, nullptr, Normal, 1e-3f, 100.f);
-		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepth, nullptr, Normal, 1e-3f, 100.f);
+		ImGui::Text("Direct");
+		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLuminDirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormalDirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepthDirect, nullptr, Normal, 1e-3f, 100.f);
+		ImGui::Text("Indirect");
+		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLuminIndirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormalIndirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepthIndirect, nullptr, Normal, 1e-3f, 100.f);
 		rtxState.denoise = denoise;
 		return changed;
 	});

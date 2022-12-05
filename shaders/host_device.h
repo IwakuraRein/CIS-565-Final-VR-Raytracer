@@ -103,7 +103,9 @@ eTempDirectResv = 4,
 eLastIndirectResv = 5,
 eThisIndirectResv = 6,
 eTempIndirectResv = 7,
-eMotionVector = 8
+eMotionVector = 8,
+eDenoiseTempA = 9,
+eDenoiseTempB = 10
 END_ENUM();
 
 START_ENUM(DebugMode)
@@ -207,10 +209,15 @@ struct RtxState
 	float lightLuminIntegInv;
 	int MIS;
 
-	float sigLumin;
-	float sigNormal;
-	float sigDepth;
+	float sigLuminDirect;
+	float sigNormalDirect;
+	float sigDepthDirect;
 	int denoise;
+
+	float sigLuminIndirect;
+	float sigNormalIndirect;
+	float sigDepthIndirect;
+	int denoiseLevel;
 };
 
 // Structure used for retrieving the primitive information in the closest hit

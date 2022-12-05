@@ -1,17 +1,3 @@
-#version 460
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_EXT_nonuniform_qualifier : enable
-#extension GL_GOOGLE_include_directive : enable
-#extension GL_EXT_scalar_block_layout : enable
-#extension GL_EXT_ray_tracing : enable
-#extension GL_EXT_ray_query : enable
-#extension GL_ARB_shader_clock : enable
-#extension GL_EXT_shader_image_load_formatted : enable
-#extension GL_ARB_shading_language_420pack : enable
-
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_buffer_reference2 : require
-
 #include "host_device.h"
 #include "globals.glsl"
 #include "layouts.glsl"
@@ -19,20 +5,16 @@
 #include "common.glsl"
 #include "compress.glsl"
 
+layout(push_constant) uniform _RtxState{
+    RtxState rtxState;
+};
+
 const float Gaussian5x5[5][5] = {
 	{ .0030f, .0133f, .0219f, .0133f, .0030f },
 	{ .0133f, .0596f, .0983f, .0596f, .0133f },
 	{ .0219f, .0983f, .1621f, .0983f, .0219f },
 	{ .0133f, .0596f, .0983f, .0596f, .0133f },
 	{ .0030f, .0133f, .0219f, .0133f, .0030f }
-};
-
-const int MaxLevel = 5;
-
-layout(local_size_x = 8, local_size_y = 8) in;
-
-layout(push_constant) uniform _RtxState {
-    RtxState rtxState;
 };
 
 float luminance(vec3 rgb) {
@@ -69,13 +51,18 @@ void loadThisGeometry(ivec2 coord, out vec3 albedo, out vec3 normal, out vec3 po
     matHash = gInfo.w & 0xFF000000;
 }
 
-vec3 waveletFilter(image2D image, ivec2 coord, vec3 norm, vec3 pos, uint matHash, int level) {
+vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHash,
+    float sigLumin, float sigNormal, float sigDepth, int level
+) {
+    if (matHash == InvalidMatId) {
+        return vec3(0.0);
+    }
     int step = 1 << level;
 
     vec3 sum = vec3(0.0);
     float sumWeight = 0.0;
 
-    vec3 color = imageLoad(image, coord).rgb;
+    vec3 color = imageLoad(inImage, coord).rgb;
 
     for (int i = -2; i <= 2; i++) {
         for (int j = -2; j <= 2; j++) {
@@ -87,60 +74,28 @@ vec3 waveletFilter(image2D image, ivec2 coord, vec3 norm, vec3 pos, uint matHash
 
             vec3 normQ; vec3 posQ; uint matHashQ;
             loadThisGeometry(q, normQ, posQ, matHashQ);
-            vec3 colorQ = imageLoad(image, q).rgb;
+            vec3 colorQ = imageLoad(inImage, q).rgb;
 
             if (matHash != matHashQ || matHashQ == InvalidMatId) {
                 continue;
             }
 
-            float var = rtxState.sigLumin;
+            float var = sigLumin;
             float distColor = abs(luminance(color) - luminance(colorQ));
             float wColor = exp(-distColor / var) + 1e-3;
             //float distColor = dot(color - colorQ, color - colorQ);
             //float wColor = exp(-distColor / rtxState.sigLumin) + 1e-3;
 
             float distNorm2 = dot(norm - normQ, norm - normQ);
-            float wNorm = min(1.0, exp(-distNorm2 / rtxState.sigNormal));
+            float wNorm = min(1.0, exp(-distNorm2 / sigNormal));
 
             float distPos2 = dot(pos - posQ, pos - posQ);
-            float wDepth = exp(-distPos2 / rtxState.sigDepth) + 1e-3;
+            float wDepth = exp(-distPos2 / sigDepth) + 1e-3;
 
             float weight = wColor * wNorm * wDepth * Gaussian5x5[i + 2][j + 2];
             sum += colorQ * weight;
             sumWeight += weight;
         }
     }
-    barrier();
-
-    vec3 res = (sumWeight < 1e-6) ? color : sum / sumWeight;
-    if (level != MaxLevel - 1) {
-        imageStore(image, coord, vec4(res, 1.0));
-    }
-    return res;
-}
-
-void main() {
-	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    if (!inBound(coord, rtxState.size) || rtxState.denoise == 0) {
-        return;
-    }
-
-    vec3 albedo; vec3 norm; vec3 pos; uint matHash;
-    loadThisGeometry(coord, albedo, norm, pos, matHash);
-
-    if (matHash == InvalidMatId) {
-        return;
-    }
-
-    vec3 direct, indirect;
-
-    for (int i = 0; i < MaxLevel; i++) {
-        direct = waveletFilter(thisDirectResultImage, coord, norm, pos, matHash, i);
-        indirect = waveletFilter(thisIndirectResultImage, coord, norm, pos, matHash, i);
-        barrier();
-    }
-    direct = LDRToHDR(direct * albedo);
-    indirect = LDRToHDR(indirect * albedo);
-    imageStore(thisDirectResultImage, coord, vec4(direct, 1.0));
-    imageStore(thisIndirectResultImage, coord, vec4(indirect, 1.0));
+    return (sumWeight < 1e-6) ? color : sum / sumWeight;
 }

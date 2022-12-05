@@ -172,10 +172,15 @@ public:
 		0,
 		true,    // MIS
 		
-		4.f,
+		0.4f,
 		0.1f,
-		1.f,
+		0.02f,
 		true,    // denoiser params
+
+		4.f,
+		1.f,
+		1.f,
+		0
 	};
 
 	SunAndSky m_sunAndSky{

@@ -144,7 +144,6 @@ void RenderOutput::createOffscreenRender(const VkExtent2D& size)
     genCmdBuf.submitAndWait(cmdBuf);
   }
 
-
   createPostDescriptor();
 }
 

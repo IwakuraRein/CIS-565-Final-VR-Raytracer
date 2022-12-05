@@ -45,6 +45,7 @@ Creating the Compute ray query renderer
   - create
   - run
 */
+
 class Renderer
 {
 public:
@@ -73,14 +74,20 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
+  std::array<nvvk::Texture, 2> m_denoiseTempBuf;
 
   std::array<nvvk::Buffer, 2> m_directReservoir;
   std::array<nvvk::Buffer, 2> m_indirectReservoir;
+
+  nvvk::Image m_directOutput;
+  nvvk::Image m_indirectOutput;
+
   nvvk::Buffer m_directTempResv;
   nvvk::Buffer m_indirectTempResv;
 
   // Depth 32bit, Normal 32bit, Metallic 8bit, Roughness 8bit, IOR 8bit, Transmission 8bit, Albedo 24bit, Hashed Material ID 8bit
   VkFormat m_gbufferFormat{ VK_FORMAT_R32G32B32A32_UINT };
+  VkFormat m_denoiseTempFormat{ VK_FORMAT_R32G32B32A32_SFLOAT };
 
   nvvk::Texture m_motionVector;
   //VkFormat m_motionVectorFormat{ VK_FORMAT_R16G16_SFLOAT };
@@ -88,9 +95,6 @@ private:
 
   // The luminance can be compressed to 32bit YCbCr
   // The unit vector can also be compressed to 32bit
-  // Direct stage: store reservoirs. including Li, Direction, Num, Weight, (dist?)
-  // Indirect stage: Li, Direction, Radiance Cache Index, undecided
-  //VkFormat m_radianceCacheFormat{ VK_FORMAT_R32G32B32A32_UINT };
   nvvk::DescriptorSetBindings m_bind;
   VkDescriptorPool      m_descPool{ VK_NULL_HANDLE };
   VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
@@ -99,9 +103,9 @@ private:
   VkPipelineLayout m_pipelineLayout{ VK_NULL_HANDLE };
   VkPipeline       m_directPipeline{ VK_NULL_HANDLE };
   VkPipeline       m_indirectPipeline{ VK_NULL_HANDLE };
-  VkPipeline       m_denoisePipeline{ VK_NULL_HANDLE };
+  VkPipeline       m_denoiseDirectPipeline{ VK_NULL_HANDLE };
+  VkPipeline       m_denoiseIndirectPipeline{ VK_NULL_HANDLE };
 
   VkExtent2D m_size{};
-
   int m_frameInd = 0;
 };
