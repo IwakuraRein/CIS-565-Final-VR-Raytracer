@@ -31,19 +31,30 @@
 
 ## Introduction
 
-
+This is a real-time path tracer based on Vulkan RT and ReSTIR mothods. 
 
 ## Pipeline
 
 ### Overview
 
 <div align="center">
-    <p>(Image)</p>
+    <img src="./images/pipeline_overview.png" width="80%" />
 </div>
+<h4>Direct illumination</h4>
+<div align="center">
+    <img src="./images/pipeline_direct.png" width="80%" />
+</div>
+<h4>Indirect illumination</h4>
+<div align="center">
+    <img src="./images/pipeline_indirect.png" width="80%" />
+</div>
+
 
 ### Resampling & Spatiotemporal Approaches
 
-Our implementation largely relies on resampling and spatial & temporal techniques. What is resampling? 
+Our implementation largely relies on resampling and spatial & temporal techniques.
+
+...
 
 ### Direct Illumination
 
@@ -71,11 +82,17 @@ Which saves 56 - 20 = 36 bytes per pixel.
 
 #### Direct ReSTIR
 
-...
+We implemented ReSTIR DI [[B. Benedikt et al., SIG 2020]]() for our direct illumination. However, different from the original paper, we did several modifications to make it more suitable for real-time path tracing:
+
+- First, we observed that, to maintain a relatively temporally stable output from ReSTIR, the number of RIS samples we sample in each ray tracing pass does not have to be very large (e.g., M = 32 in the paper). M = 4 is enough.
+- Second, for reservoir clamping, we clamped the M of valid temporally neighboring reservoir to about 80x of current ones. This helps our direct illumination to quickly adapt to updated camera perspectives while keeping stable.
+- Last, we didn't use spatial resampling in our implementation, though we have it as an option in our code. This is because spatial resampling is time consuming. And our implementation of spatial resampling doesn't produce much improvement. So instead, we tried to use a spatial filter to remove noise.
 
 ### Indirect Illumination
 
 #### Indirect ReSTIR
+
+For indirect illumination, we implemented ReSTIR GI [[S. Ouyang et al., HPG 2021]](). Similar to DI, we did not use spatial resampling.
 
 ...
 
@@ -89,13 +106,20 @@ Besides, we did as suggested in the ReSTIR GI paper, that to decide whether to t
 
 ### Denoising
 
-#### A Lightweight Denoiser based on Edge-Avoiding A-Trous
+#### A Lightweight Edge-Avoiding A-Trous Filter
 
 In both ReSTIR DI and GI we have already included reuse of temporally neighboring samples, which gives us pretty decent temporally stable results. Therefore when it comes to denoising, we don't necessarily need a spatiotemporal denoiser like SVGF, not to say that temporally reused outputs from ReSTIR are correlated and prone to artifacts if denoised temporally.
 
 Just like what we did in project 4, our denoising process is logically divided into three stages: demodulation, filtering and remodulation. We let the output from ReSTIR to be divided by screen-space albedo (trick by setting materials' base color to 1), and do tone mapping to compress radiance values into a range that denoiser can handle well.
 
 The direct and indirect components are filtered separately and merged after filtering. For direct we use a 4-level wavelet filter since it's already smooth. For indirect, we use a 6-level wavelet to reduce flickering.
+
+|                        | Direct                  | Indirect                | Combined                |
+| ---------------------- | ----------------------- | ----------------------- | ----------------------- |
+| Demodulated Input      | ![](./images/dir.jpg)   | ![](./images/ind.jpg)   | ![](./images/com.jpg)   |
+| Denoised + Remodulated | ![](./images/dir_d.jpg) | ![](./images/ind_d.jpg) | ![](./images/com_d.jpg) |
+
+
 
 ## Future Improvement
 

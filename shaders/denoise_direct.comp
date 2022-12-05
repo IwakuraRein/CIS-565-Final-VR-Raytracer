@@ -24,7 +24,7 @@ void main() {
 
     vec3 albedo; vec3 norm; vec3 pos; uint matHash;
     loadThisGeometry(coord, albedo, norm, pos, matHash);
-
+    
     if (rtxState.denoiseLevel == 0) {
         vec3 res = waveletFilter(thisDirectResultImage, coord, norm, pos, matHash,
             rtxState.sigLuminDirect, rtxState.sigNormalDirect, rtxState.sigDepthDirect, 0);
