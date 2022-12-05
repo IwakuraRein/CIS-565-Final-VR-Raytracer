@@ -150,6 +150,12 @@ struct Aabb
 #define ALPHA_OPAQUE 0
 #define ALPHA_MASK 1
 #define ALPHA_BLEND 2
+struct Displacement
+{
+	int texture;
+	float factor;
+	float offset;
+};
 struct GltfShadeMaterial
 {
 	// 0
@@ -200,13 +206,8 @@ struct GltfShadeMaterial
 	int  clearcoatTexture;
 	int  clearcoatRoughnessTexture;
 	uint sheen;
-	
-	int displacementTexture;
-	// 52
-	int minMaxTexture;
-	float displacementFactor;
-	float displacementOffset;
-	int pad;
+	Displacement displacement;
+	vec2 pad;
 };
 
 // Gbuffer

@@ -390,12 +390,12 @@ void Scene::createAabbBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& gltfS
 			v0 = v_0 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
 			v1 = v_1 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
 			v2 = v_2 + (mat.displacement.displacementGeometryOffset - mat.displacement.displacementGeometryFactor) * normal;
-			minimum = vec3 {
+			minimum = vec3{
 				std::min(std::min(std::min(v0.x, v1.x), v2.x), minimum.x),
 				std::min(std::min(std::min(v0.y, v1.y), v2.y), minimum.y),
 				std::min(std::min(std::min(v0.z, v1.z), v2.z), minimum.z),
 			};
-			maximum = vec3 {
+			maximum = vec3{
 				std::max(std::max(std::max(v0.x, v1.x), v2.x), maximum.x),
 				std::max(std::max(std::max(v0.y, v1.y), v2.y), maximum.y),
 				std::max(std::max(std::max(v0.z, v1.z), v2.z), maximum.z),
@@ -515,10 +515,10 @@ void Scene::createMaterialBuffer(VkCommandBuffer cmdBuf, const nvh::GltfScene& g
 		smat.clearcoatRoughnessTexture = m.clearcoat.roughnessTexture;
 		smat.sheen = packUnorm4x8(vec4(m.sheen.colorFactor, m.sheen.roughnessFactor));
 
-		smat.displacementTexture = m.displacement.displacementGeometryTexture;
-		smat.displacementFactor  = m.displacement.displacementGeometryFactor;
-		smat.displacementOffset  = m.displacement.displacementGeometryOffset;
-		smat.minMaxTexture       = m.displacement.displacementGeometryTexture != -1? displacementCount++ : -1;
+		//smat.displacement.texture = m.displacement.displacementGeometryTexture;
+		smat.displacement.factor  = m.displacement.displacementGeometryFactor;
+		smat.displacement.offset  = m.displacement.displacementGeometryOffset;
+		smat.displacement.texture       = m.displacement.displacementGeometryTexture != -1? displacementCount++ : -1;
 
 		shadeMaterials.emplace_back(smat);
 	}

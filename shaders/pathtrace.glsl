@@ -61,7 +61,8 @@ vec3 DebugInfo(in State state) {
     case eNormal:
       return (state.normal + vec3(1)) * .5;
     case eDepth:
-      return vec3(0.0);
+      // return prd.hitT;
+      return vec3(0);
     case eBaseColor:
       return state.mat.albedo;
     case eEmissive:
