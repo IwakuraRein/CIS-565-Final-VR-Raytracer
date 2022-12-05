@@ -171,6 +171,11 @@ public:
 		0,       // environment map luminance integral inverse
 		0,
 		true,    // MIS
+		
+		4.f,
+		0.1f,
+		1.f,
+		true,    // denoiser params
 	};
 
 	SunAndSky m_sunAndSky{

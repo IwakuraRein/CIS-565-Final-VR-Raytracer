@@ -56,7 +56,8 @@ S_OUT = 1,  // Offscreen output image
 S_SCENE = 2,  // Scene data
 S_ENV = 3,  // Environment / Sun & Sky
 S_RAYQ = 4, // Ray query renderer
-S_WF = 5   // Wavefront extra data
+S_WF = 5,   // Wavefront extra data
+sDenoise = 6
 END_ENUM();
 
 // Acceleration Structure - Set 0
@@ -205,6 +206,11 @@ struct RtxState
 	float envMapLuminIntegInv;
 	float lightLuminIntegInv;
 	int MIS;
+
+	float sigLumin;
+	float sigNormal;
+	float sigDepth;
+	int denoise;
 };
 
 // Structure used for retrieving the primitive information in the closest hit

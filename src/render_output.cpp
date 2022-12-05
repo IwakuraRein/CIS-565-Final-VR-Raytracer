@@ -51,10 +51,10 @@ void RenderOutput::setup(const VkDevice& device, const VkPhysicalDevice& physica
 
 void RenderOutput::destroy()
 {
-  m_pAlloc->destroy(m_directResult[0]);
-  m_pAlloc->destroy(m_indirectResult[0]);
-  m_pAlloc->destroy(m_directResult[1]);
-  m_pAlloc->destroy(m_indirectResult[1]);
+  for (int i = 0; i < 2; i++) {
+      m_pAlloc->destroy(m_directResult[i]);
+      m_pAlloc->destroy(m_indirectResult[i]);
+  }
 
   vkDestroyPipeline(m_device, m_postPipeline, nullptr);
   vkDestroyPipelineLayout(m_device, m_postPipelineLayout, nullptr);

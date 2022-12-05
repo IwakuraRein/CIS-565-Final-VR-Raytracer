@@ -140,6 +140,9 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	ivec2 indSize = state.size / 2;
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
 	vkCmdDispatch(cmdBuf, (indSize[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (indSize[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoisePipeline);
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 }
 
 // handle window resize

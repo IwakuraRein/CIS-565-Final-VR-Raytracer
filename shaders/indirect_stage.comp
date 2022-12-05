@@ -364,15 +364,14 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
             bigWIndirect(resv, primState, primWo);
             */
         indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
-        vec3 albedo = primState.mat.albedo;
         primState.mat.albedo = vec3(1.0);
-        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi) * albedo;
+        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
     }
 
     if (hasNan(indirect)) {
         indirect = vec3(0.0);
     }
-    return indirect;
+    return HDRToLDR(indirect);
 }
 
 void main() {

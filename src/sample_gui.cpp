@@ -184,6 +184,17 @@ bool SampleGUI::guiRayTracing()
 		rtxState.MIS = mis;
 		return changed;
 		});
+
+	GuiH::Group<bool>("Denoiser", true, [&] {
+		bool denoise = rtxState.denoise;
+		changed |= GuiH::Checkbox("Enable", "", &denoise);
+		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLumin, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormal, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepth, nullptr, Normal, 1e-3f, 100.f);
+		rtxState.denoise = denoise;
+		return changed;
+	});
+
 	return changed;
 }
 

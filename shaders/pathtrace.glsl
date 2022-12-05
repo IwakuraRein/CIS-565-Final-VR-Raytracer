@@ -282,18 +282,21 @@ void loadThisGeometryInfo(ivec2 imageCoords, out vec3 normal, out float depth, o
     matHash = gInfo.w & 0xFF000000;
 }
 
-Ray raySpawn(ivec2 coords, ivec2 sizeImage) {
+Ray raySpawn(ivec2 coord, ivec2 sizeImage) {
     // Compute sampling position between [-1 .. 1]
-    const vec2 pixelCenter = vec2(coords) + 0.5;
+    const vec2 pixelCenter = vec2(coord) + 0.5;
     const vec2 inUV = pixelCenter / vec2(sizeImage.xy);
     vec2 d = inUV * 2.0 - 1.0;
-
     // Compute ray origin and direction
     vec4 origin = sceneCamera.viewInverse * vec4(0, 0, 0, 1);
     vec4 target = sceneCamera.projInverse * vec4(d.x, d.y, 1, 1);
     vec4 direction = sceneCamera.viewInverse * vec4(normalize(target.xyz), 0);
-
     return Ray(origin.xyz, direction.xyz);
+}
+
+vec3 getCameraPos(ivec2 coord, float dist) {
+    Ray ray = raySpawn(coord, rtxState.size);
+    return ray.origin + ray.direction * dist;
 }
 
 vec3 DebugInfo(in State state) {

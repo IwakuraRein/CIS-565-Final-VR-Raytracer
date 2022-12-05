@@ -347,7 +347,7 @@ vec3 ReSTIRDirect(Ray r) {
     ClosestHit(r);
 
     if (prd.hitT >= INFINITY) {
-        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, 0));
+        imageStore(thisGbuffer, imageCoords, uvec4(floatBitsToUint(INFINITY), 0, 0, InvalidMatId));
         imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
         return EnvRadiance(r.direction);
     }
@@ -459,7 +459,8 @@ vec3 ReSTIRDirect(Ray r) {
     if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
         direct = vec3(0.0);
     }
-    return state.mat.emission + direct * albedo;
+    return HDRToLDR(state.mat.emission + direct);
+    return state.mat.emission + direct;
 }
 
 void main() {

@@ -191,4 +191,12 @@ bool inBound(ivec2 p, ivec2 bound) {
     return inBound(p, ivec2(0, 0), bound);
 }
 
+vec3 HDRToLDR(vec3 color) {
+    return color / (color + 1.0);
+}
+
+vec3 LDRToHDR(vec3 color) {
+    return color / (1.0 - color + 1e-3);
+}
+
 #endif  // RAYCOMMON_GLSL
