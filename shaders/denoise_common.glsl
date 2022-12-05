@@ -97,5 +97,9 @@ vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHa
             sumWeight += weight;
         }
     }
-    return (sumWeight < 1e-6) ? color : sum / sumWeight;
+    vec3 res = (sumWeight < 1e-5) ? vec3(0.0) : sum / sumWeight;
+    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0) {
+        res = vec3(0.0);
+    }
+    return res;
 }

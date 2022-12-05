@@ -196,7 +196,7 @@ vec3 HDRToLDR(vec3 color) {
 }
 
 vec3 LDRToHDR(vec3 color) {
-    return color / (1.0 - color + 1e-3);
+    return color / (1.01 - color);
 }
 
 #endif  // RAYCOMMON_GLSL
