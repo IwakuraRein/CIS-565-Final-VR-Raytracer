@@ -82,7 +82,7 @@ vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHa
 
             float var = sigLumin;
             float distColor = abs(luminance(color) - luminance(colorQ));
-            float wColor = exp(-distColor / var) + 1e-3;
+            float wColor = exp(-distColor / var) + 1e-2;
             //float distColor = dot(color - colorQ, color - colorQ);
             //float wColor = exp(-distColor / rtxState.sigLumin) + 1e-3;
 
@@ -90,7 +90,7 @@ vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHa
             float wNorm = min(1.0, exp(-distNorm2 / sigNormal));
 
             float distPos2 = dot(pos - posQ, pos - posQ);
-            float wDepth = exp(-distPos2 / sigDepth) + 1e-3;
+            float wDepth = exp(-distPos2 / sigDepth) + 1e-2;
 
             float weight = wColor * wNorm * wDepth * Gaussian5x5[i + 2][j + 2];
             sum += colorQ * weight;
