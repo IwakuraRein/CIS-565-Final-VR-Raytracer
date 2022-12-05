@@ -48,6 +48,7 @@ layout(push_constant) uniform _RtxState {
 
 PtPayload prd;
 ShadowHitPayload shadow_payload;
+ivec2 imageCoords;
 
 #include "layouts.glsl"
 #include "random.glsl"
@@ -77,65 +78,39 @@ ivec2 SampleSizzled() {
 }
 #endif
 
-//
-//--------------------------------------------------------------------------------------------------
-//
-//
+/*
 void main() {
-  uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
+  // uint64_t start = clockRealtimeEXT();  // Debug - Heatmap
 
   ivec2 imageRes = rtxState.size;
-  ivec2 imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
 
-  // Initialize the seed for the random number only once once
-  // uvec2 s    = pcg2d(imageCoords * int(clockARB()));
-  // prd.seed = s.x + s.y;
-  // prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.frame * rtxState.spp);
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
-  //prd.seed = initRandom(uvec2(imageRes), gl_GlobalInvocationID.xy, rtxState.frame);
 
   vec3 pixelColor = vec3(0);
-
-  for(int smpl = 0; smpl < rtxState.spp; ++smpl) {
-    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
-    State state;
-    float firstHitT;
+  
+  Ray ray = raySpawn(imageCoords, ivec2(imageRes));
     
-    vec3 radiance = DirectSample(ray, state, firstHitT);
-    if (rtxState.debugging_mode == eIndirectResult) 
-      radiance = IndirectSample(ray, state, firstHitT);
-    else if (rtxState.debugging_mode == eNoDebug)
-      radiance += IndirectSample(ray, state, firstHitT);
-
-    float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
-    if(lum > rtxState.fireflyClampThreshold) {
-      radiance *= rtxState.fireflyClampThreshold / lum;
-    }
-
-    pixelColor += radiance;
+  vec3 radiance = DirectSample(ray);
+  
+  float lum = dot(radiance, vec3(0.212671f, 0.715160f, 0.072169f));
+  if(lum > rtxState.fireflyClampThreshold) {
+    radiance *= rtxState.fireflyClampThreshold / lum;
   }
-  pixelColor /= rtxState.spp;
+  pixelColor += radiance;
 
-  // Debug - Heatmap
-  if(rtxState.debugging_mode == eHeatmap) {
-    uint64_t end = clockRealtimeEXT();
-    float low = rtxState.minHeatmap;
-    float high = rtxState.maxHeatmap;
-    float val = clamp((float(end - start) - low) / (high - low), 0.0, 1.0);
-    pixelColor = temperature(val);
-
-    // Wrap & SM visualization
-    // pixelColor = temperature(float(gl_SMIDNV) / float(gl_SMCountNV - 1)) * float(gl_WarpIDNV) / float(gl_WarpsPerSMNV - 1);
-  }
-
-  // Saving pixel color
   if(rtxState.frame > 0) {
     // Do accumulation over time
-    vec3 old_color = imageLoad(resultImage, imageCoords).xyz;
+    vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
     vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    imageStore(resultImage, imageCoords, vec4(new_result, 1.f));
+    //imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1.0));
   } else {
     // First frame, replace the value in the buffer
-    imageStore(resultImage, imageCoords, vec4(pixelColor, 1.f));
+    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));
   }
+}
+*/
+
+void main() {
 }

@@ -17,26 +17,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
- /*
-   Various structure used by CPP and GLSL
- */
-
+/*
+  Various structure used by CPP and GLSL
+*/
 
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
-
 #ifdef __cplusplus
 #include <stdint.h>
 #include "nvmath/nvmath.h"
- // GLSL Type
+// GLSL Type
 using ivec2 = nvmath::vec2i;
 using vec2 = nvmath::vec2f;
 using vec3 = nvmath::vec3f;
 using vec4 = nvmath::vec4f;
 using mat4 = nvmath::mat4f;
 using uint = unsigned int;
+using uvec4 = nvmath::vec4ui;
+using uvec2 = nvmath::vec2ui;
 #endif
 
 // clang-format off
@@ -57,7 +56,8 @@ S_OUT = 1,  // Offscreen output image
 S_SCENE = 2,  // Scene data
 S_ENV = 3,  // Environment / Sun & Sky
 S_RAYQ = 4, // Ray query renderer
-S_WF = 5   // Wavefront extra data
+S_WF = 5,   // Wavefront extra data
+sDenoise = 6
 END_ENUM();
 
 // Acceleration Structure - Set 0
@@ -67,8 +67,12 @@ END_ENUM();
 
 // Output image - Set 1
 START_ENUM(OutputBindings)
-eSampler = 0,  // As sampler
-eStore = 1   // As storage
+eDirectSampler = 0,  // As sampler
+eIndirectSampler = 1,  // As sampler
+eLastDirectResult = 2,   // As storage
+eLastIndirectResult = 3,   // As storage
+eThisDirectResult = 4,   // As storage
+eThisIndirectResult = 5   // As storage
 END_ENUM();
 
 // Scene Data - Set 2
@@ -91,32 +95,54 @@ END_ENUM();
 
 // Ray Query - Set 4
 START_ENUM(RayQBindings)
-eGbuffer = 0
+eLastGbuffer = 0,
+eThisGbuffer = 1,
+eLastDirectResv = 2,
+eThisDirectResv = 3,
+eTempDirectResv = 4,
+eLastIndirectResv = 5,
+eThisIndirectResv = 6,
+eTempIndirectResv = 7,
+eMotionVector = 8,
+eDenoiseTempA = 9,
+eDenoiseTempB = 10
 END_ENUM();
 
 START_ENUM(DebugMode)
 eNoDebug = 0,   //
-eDirectResult = 1, //
-eIndirectResult = 2, //
+eDirectStage = 1, //
+eIndirectStage = 2, //
 eBaseColor = 3,   //
 eNormal = 4,   //
-eMetallic = 5,   //
-eEmissive = 6,   //
-eAlpha = 7,   //
+eDepth = 5,    //
+eMetallic = 6,   //
+eEmissive = 7,   //
 eRoughness = 8,   //
-eTexcoord = 9,   //
-eTangent = 10,   //
-eHeatmap = 11   //
+eTexcoord = 9   //
 END_ENUM();
 // clang-format on
 
+START_ENUM(ReSTIRState)
+eNone = 0,
+eRIS = 1,
+eSpatial = 2,
+eTemporal = 3,
+eSpatiotemporal = 4
+END_ENUM();
+
 // Camera of the scene
+#define CAMERA_NEAR 0.001f
+#define CAMERA_FAR 100000.0f
 struct SceneCamera
 {
-	mat4  viewInverse;
-	mat4  projInverse;
-	float focalDist;
-	float aperture;
+	mat4 viewInverse;
+	mat4 projInverse;
+	mat4 projView;
+	mat4 lastView;
+	mat4 lastProjView;
+	vec3 lastPosition;
+	//float focalDist;
+	//float aperture;
 	// Extra
 	int nbLights;
 };
@@ -124,12 +150,11 @@ struct SceneCamera
 struct VertexAttributes
 {
 	vec3 position;
-	uint normal;    // compressed using oct
-	vec2 texcoord;  // Tangent handiness, stored in LSB of .y
-	uint tangent;   // compressed using oct
-	uint color;     // RGBA
+	uint normal;   // compressed using oct
+	vec2 texcoord; // Tangent handiness, stored in LSB of .y
+	uint tangent;  // compressed using oct
+	uint color;	   // RGBA
 };
-
 
 // GLTF material
 #define MATERIAL_METALLICROUGHNESS 0
@@ -137,90 +162,62 @@ struct VertexAttributes
 #define ALPHA_OPAQUE 0
 #define ALPHA_MASK 1
 #define ALPHA_BLEND 2
+#define MAX_IOR_MINUS_ONE 3.f
 struct GltfShadeMaterial
 {
-	// 0
 	vec4 pbrBaseColorFactor;
-	// 4
-	int   pbrBaseColorTexture;
+
+	int pbrBaseColorTexture;
 	float pbrMetallicFactor;
 	float pbrRoughnessFactor;
-	int   pbrMetallicRoughnessTexture;
-	// 8
-	vec4 khrDiffuseFactor;  // KHR_materials_pbrSpecularGlossiness
-	vec3 khrSpecularFactor;
-	int  khrDiffuseTexture;
-	// 16
-	int   shadingModel;  // 0: metallic-roughness, 1: specular-glossiness
-	float khrGlossinessFactor;
-	int   khrSpecularGlossinessTexture;
-	int   emissiveTexture;
-	// 20
-	vec3 emissiveFactor;
-	int  alphaMode;
-	// 24
-	float alphaCutoff;
-	int   doubleSided;
-	int   normalTexture;
-	float normalTextureScale;
-	// 28
-	mat4 uvTransform;
-	// 32
-	int unlit;
+	int pbrMetallicRoughnessTexture;
 
+	int emissiveTexture;
+	vec3 emissiveFactor;
+	
+	int normalTexture;
+	float normalTextureScale;
 	float transmissionFactor;
-	int   transmissionTexture;
+	int transmissionTexture;
 
 	float ior;
-	// 36
-	vec3  anisotropyDirection;
-	float anisotropy;
-	// 40
-	vec3  attenuationColor;
-	float thicknessFactor;  // 44
-	int   thicknessTexture;
-	float attenuationDistance;
-	// --
-	float clearcoatFactor;
-	float clearcoatRoughness;
-	// 48
-	int  clearcoatTexture;
-	int  clearcoatRoughnessTexture;
-	uint sheen;
-	int  pad;
-	// 52
-};
-
-// Gbuffer
-struct GeomData {
-	vec3 normal;
-	vec3 tangent;
-	vec2 texCoord;
-	//8
-	uint matIndex;
-	vec3 position;
-	//12
-	vec3 vertColor; //vertex color
-	float pad;
+	int alphaMode;
+	float alphaCutoff;
+	int pad;
 };
 
 // Use with PushConstant
 struct RtxState
 {
-	int   frame;                  // Current frame, start at 0
-	int   maxDepth;               // How deep the path is
-	int   spp;
-	float fireflyClampThreshold;  // to cut fireflies
+	int frame;	  // Current frame, start at 0
+	int maxDepth; // How deep the path is
+	int spp;
+	float fireflyClampThreshold; // to cut fireflies
 
-	float hdrMultiplier;          // To brightening the scene
-	int   debugging_mode;         // See DebugMode
-	int   pbrMode;                // 0-Disney, 1-Gltf
-	float environmentProb;        // Used in direct light importance sampling
+	float hdrMultiplier;   // To brightening the scene
+	int debugging_mode;	   // See DebugMode
+	float environmentProb; // Used in direct light importance sampling
+	uint time; // How long has the app been running. miliseconds.
 
-	ivec2 size;                   // rendering size
-	int   minHeatmap;             // Debug mode - heat map
-	int   maxHeatmap;
-	uint time;                   // How long has the app been running. miliseconds.
+	int ReSTIRState;
+	int RISSampleNum;
+	int reservoirClamp;
+	int accumulate;
+
+	ivec2 size;		// rendering size
+	float envMapLuminIntegInv;
+	float lightLuminIntegInv;
+	int MIS;
+
+	float sigLuminDirect;
+	float sigNormalDirect;
+	float sigDepthDirect;
+	int denoise;
+
+	float sigLuminIndirect;
+	float sigNormalIndirect;
+	float sigDepthIndirect;
+	int denoiseLevel;
 };
 
 // Structure used for retrieving the primitive information in the closest hit
@@ -229,9 +226,8 @@ struct InstanceData
 {
 	uint64_t vertexAddress;
 	uint64_t indexAddress;
-	int      materialIndex;
+	int materialIndex;
 };
-
 
 // KHR_lights_punctual extension.
 // see https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_lights_punctual
@@ -243,10 +239,38 @@ const int LightType_Spot = 2;
 // custom light source for direct light importance sampling
 const int LightType_Triangle = 3;
 
+// ReSTIR
+struct LightSample {
+	vec3 Li;
+	vec3 wi;
+	float dist;
+	float pHat;
+};
+
+struct GISample {
+	vec3 L;
+	vec3 xv, nv;
+	vec3 xs, ns;
+	float pHat;
+};
+
+struct DirectReservoir {
+	LightSample lightSample;
+	uint num;
+	float weight;
+};
+
+struct IndirectReservoir {
+	GISample giSample;
+	uint	 num;
+	float weight;
+	float bigW;
+};
+
 // acceleration structure for importance sampling - pre-computed
 struct ImptSampData
 {
-	int  alias;
+	int alias;
 	float q;
 	float pdf;
 	float aliasPdf;
@@ -254,13 +278,13 @@ struct ImptSampData
 
 struct PuncLight // point, spot, or directional light.
 {
-	int   type;
-	vec3  direction;
+	int type;
+	vec3 direction;
 
 	float intensity;
-	vec3  color;
+	vec3 color;
 
-	vec3  position;
+	vec3 position;
 	float range;
 
 	float outerConeCos;
@@ -270,7 +294,8 @@ struct PuncLight // point, spot, or directional light.
 	ImptSampData impSamp;
 };
 
-struct TrigLight { // triangles of emissive meshes
+struct TrigLight
+{ // triangles of emissive meshes
 	uint matIndex;
 	uint transformIndex;
 	vec3 v0;
@@ -283,7 +308,8 @@ struct TrigLight { // triangles of emissive meshes
 	vec3 pad;
 };
 
-struct LightBufInfo {
+struct LightBufInfo
+{
 	uint puncLightSize;
 	uint trigLightSize;
 	float trigSampProb;
@@ -297,18 +323,20 @@ struct Tonemapper
 	float contrast;
 	float saturation;
 	float vignette;
+
 	float avgLum;
 	float zoom;
-	vec2  renderingRatio;
-	int   autoExposure;
-	float Ywhite;  // Burning white
-	float key;     // Log-average luminance
-};
+	vec2 renderingRatio;
 
+	int autoExposure;
+	float Ywhite; // Burning white
+	float key;	  // Log-average luminance
+	int pad;
+};
 
 struct SunAndSky
 {
-	vec3  rgb_unit_conversion;
+	vec3 rgb_unit_conversion;
 	float multiplier;
 
 	float haze;
@@ -316,20 +344,19 @@ struct SunAndSky
 	float saturation;
 	float horizon_height;
 
-	vec3  ground_color;
+	vec3 ground_color;
 	float horizon_blur;
 
-	vec3  night_color;
+	vec3 night_color;
 	float sun_disk_intensity;
 
-	vec3  sun_direction;
+	vec3 sun_direction;
 	float sun_disk_scale;
 
 	float sun_glow_intensity;
-	int   y_is_up;
-	int   physically_scaled_sun;
-	int   in_use;
+	int y_is_up;
+	int physically_scaled_sun;
+	int in_use;
 };
 
-
-#endif  // COMMON_HOST_DEVICE
+#endif // COMMON_HOST_DEVICE

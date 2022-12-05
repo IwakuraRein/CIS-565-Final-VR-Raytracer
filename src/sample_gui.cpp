@@ -108,7 +108,7 @@ bool SampleGUI::guiCamera()
 	bool changed{ false };
 	changed |= ImGuiH::CameraWidget();
 	auto& cam = _se->m_scene.getCamera();
-	changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
+	//changed |= GuiH::Slider("Aperture", "", &cam.aperture, nullptr, ImGuiH::Control::Flags::Normal, 0.0f, 0.5f);
 
 	return changed;
 }
@@ -122,15 +122,12 @@ bool SampleGUI::guiRayTracing()
 	bool  changed{ false };
 	auto& rtxState(_se->m_rtxState);
 
-	changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 32);
-	changed |= GuiH::Slider("Max Iteration ", "", &_se->m_maxFrames, nullptr, Normal, 1, 10000);
+	changed |= GuiH::Slider("Max Iteration ", "", &_se->m_maxFrames, nullptr, Normal, 1, 1000);
 	changed |= GuiH::Slider("De-scaling ",
 		"Reduce resolution while navigating.\n"
 		"Speeding up rendering while camera moves.\n"
 		"Value of 1, will not de-scale",
 		&_se->m_descalingLevel, nullptr, Normal, 1, 8);
-
-	changed |= GuiH::Selection("Pbr Mode", "PBR material model", &rtxState.pbrMode, nullptr, Normal, { "Disney", "Gltf" });
 
 	changed |= GuiH::Selection("Debug Mode", "Display unique values of material", &rtxState.debugging_mode, nullptr, Normal,
 		{
@@ -139,38 +136,70 @@ bool SampleGUI::guiRayTracing()
 			"Indirect Stage",
 			"BaseColor",
 			"Normal",
+			"Depth",
 			"Metallic",
 			"Emissive",
-			"Alpha",
 			"Roughness",
 			"TexCoord",
-			"Tangent",
-			"HeatMap",
+			"Custom",
 		});
+	changed |= GuiH::Checkbox("Accumulate", "", (bool*)&rtxState.accumulate);
 
-	if (rtxState.debugging_mode == eHeatmap)
-	{
-		changed |= GuiH::Drag("Min Heat map", "Minimum timing value, below this value it will be blue",
-			&rtxState.minHeatmap, nullptr, Normal, 0, 1'000'000, 100);
-		changed |= GuiH::Drag("Max Heat map", "Maximum timing value, above this value it will be red",
-			&rtxState.maxHeatmap, nullptr, Normal, 0, 1'000'000, 100);
-	}
+	// if (rtxState.debugging_mode == eHeatmap)
+	// {
+	// 	changed |= GuiH::Drag("Min Heat map", "Minimum timing value, below this value it will be blue",
+	// 		&rtxState.minHeatmap, nullptr, Normal, 0, 1'000'000, 100);
+	// 	changed |= GuiH::Drag("Max Heat map", "Maximum timing value, above this value it will be red",
+	// 		&rtxState.maxHeatmap, nullptr, Normal, 0, 1'000'000, 100);
+	// }
 
 	GuiH::Info("Frame", "", std::to_string(rtxState.frame), GuiH::Flags::Disabled);
 
-	changed |= GuiH::Slider("Sampling Rate",
-		"The samples per pixel",
-		&rtxState.spp, nullptr, Normal, 0, 32);
-	GuiH::Group<bool>("Direct Light", false, [&] {
+	changed |= GuiH::Selection("ReSTIR State", "Whether to enable or enable part of ReSTIR", &rtxState.ReSTIRState, nullptr, Normal,
+		{
+			"None",
+			"RIS",
+			"Spatial",
+			"Temporal",
+			"Spatiotemporal"
+		});
+
+	changed |= GuiH::Slider("RIS Sample Num", "", &rtxState.RISSampleNum, nullptr, Normal, 1, 64);
+	changed |= GuiH::Slider("Reservoir Clamp", "", &rtxState.reservoirClamp, nullptr, Normal, 1, 1600);
+
+	GuiH::Group<bool>("Direct Light", true, [&] {
 		changed |= GuiH::Slider("Environment Weight",
 			"If there is a environment map, the probability it will be used in direct light sampling",
 			&rtxState.environmentProb, nullptr, Normal, 0.f, 1.f);
 		return changed;
 		});
-	GuiH::Group<bool>("Indirect Light", false, [&] {
-		ImGui::Text("Place Holder");
-		return true;
+	GuiH::Group<bool>("Indirect Light", true, [&] {
+		//changed |= GuiH::Slider("Sample Rate",
+		//	"Samples per pixel",
+		//	&rtxState.spp, nullptr, Normal, 0, 16);
+		changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
+
+		bool mis = rtxState.MIS;
+		changed |= GuiH::Checkbox("MIS", "", &mis);
+		rtxState.MIS = mis;
+		return changed;
 		});
+
+	GuiH::Group<bool>("Denoiser", true, [&] {
+		bool denoise = rtxState.denoise;
+		changed |= GuiH::Checkbox("Enable", "", &denoise);
+		ImGui::Text("Direct");
+		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLuminDirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormalDirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepthDirect, nullptr, Normal, 1e-3f, 100.f);
+		ImGui::Text("Indirect");
+		changed |= GuiH::Slider("Sigma Color", "", &rtxState.sigLuminIndirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormalIndirect, nullptr, Normal, 1e-3f, 100.f);
+		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepthIndirect, nullptr, Normal, 1e-3f, 100.f);
+		rtxState.denoise = denoise;
+		return changed;
+	});
+
 	return changed;
 }
 
@@ -189,19 +218,28 @@ bool SampleGUI::guiTonemapper()
 		0.5f,          // Ywhite;  // Burning white
 		0.5f,          // key;     // Log-average luminance
 	};
+	static const float _zero{ 0.f }, _gamma{ 2.2f };
 
-	auto& tm = _se->m_offscreen.m_tonemapper;
+	auto& tm = _se->m_offscreen.m_tm;
+	auto& depth_tm = _se->m_offscreen.m_depthTm;
 	bool           changed{ false };
 	std::bitset<8> b(tm.autoExposure);
 
 	bool autoExposure = b.test(0);
 
-	changed |= GuiH::Checkbox("Auto Exposure", "Adjust exposure", (bool*)&autoExposure);
-	changed |= GuiH::Slider("Exposure", "Scene Exposure", &tm.avgLum, &default_tm.avgLum, GuiH::Flags::Normal, 0.001f, 5.00f);
-	changed |= GuiH::Slider("Brightness", "", &tm.brightness, &default_tm.brightness, GuiH::Flags::Normal, 0.0f, 2.0f);
-	changed |= GuiH::Slider("Contrast", "", &tm.contrast, &default_tm.contrast, GuiH::Flags::Normal, 0.0f, 2.0f);
-	changed |= GuiH::Slider("Saturation", "", &tm.saturation, &default_tm.saturation, GuiH::Flags::Normal, 0.0f, 5.0f);
-	changed |= GuiH::Slider("Vignette", "", &tm.vignette, &default_tm.vignette, GuiH::Flags::Normal, 0.0f, 2.0f);
+	if (_se->m_rtxState.debugging_mode == eDepth) {
+		GuiH::Slider("Exposure", "", &depth_tm.brightness, &_zero, GuiH::Flags::Normal, -10.f, 10.f);
+		GuiH::Slider("Gamma", "", &depth_tm.contrast, &_gamma, GuiH::Flags::Normal, 0.01f, 5.f);
+		GuiH::Slider("Alpha", "", &depth_tm.saturation, &_zero, GuiH::Flags::Normal, -1.f, 1.f);
+	}
+	else {
+		GuiH::Checkbox("Auto Exposure", "Adjust exposure", (bool*)&autoExposure);
+		GuiH::Slider("Exposure", "Scene Exposure", &tm.avgLum, &default_tm.avgLum, GuiH::Flags::Normal, 0.001f, 5.00f);
+		GuiH::Slider("Brightness", "", &tm.brightness, &default_tm.brightness, GuiH::Flags::Normal, 0.0f, 2.0f);
+		GuiH::Slider("Contrast", "", &tm.contrast, &default_tm.contrast, GuiH::Flags::Normal, 0.0f, 2.0f);
+		GuiH::Slider("Saturation", "", &tm.saturation, &default_tm.saturation, GuiH::Flags::Normal, 0.0f, 5.0f);
+		GuiH::Slider("Vignette", "", &tm.vignette, &default_tm.vignette, GuiH::Flags::Normal, 0.0f, 2.0f);
+	}
 
 
 	if (autoExposure)
@@ -370,7 +408,7 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 		collect.statTone.y += float(info.cpu.average / 1000.0f);
 		collect.frameTime += 1000.0f / ImGui::GetIO().Framerate;
 
-		if (_se->m_offscreen.m_tonemapper.autoExposure == 1)
+		if (_se->m_offscreen.m_push.tm.autoExposure == 1)
 		{
 			profiler.getTimerInfo("Mipmap", info);
 			mipmapGen = float(info.gpu.average / 1000.0f);
@@ -394,7 +432,7 @@ bool SampleGUI::guiProfiler(nvvk::ProfilerVK& profiler)
 	ImGui::Text("Frame     [ms]: %2.3f", display.frameTime);
 	ImGui::Text("Render GPU/CPU [ms]: %2.3f  /  %2.3f", display.statRender.x, display.statRender.y);
 	ImGui::Text("Tone+UI GPU/CPU [ms]: %2.3f  /  %2.3f", display.statTone.x, display.statTone.y);
-	if (_se->m_offscreen.m_tonemapper.autoExposure == 1)
+	if (_se->m_offscreen.m_push.tm.autoExposure == 1)
 		ImGui::Text("Mipmap Gen: %2.3fms", mipmapGen);
 	ImGui::ProgressBar(display.statRender.x / display.frameTime);
 

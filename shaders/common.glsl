@@ -25,6 +25,7 @@
 #ifndef RAYCOMMON_GLSL
 #define RAYCOMMON_GLSL
 
+const float InvalidPdf = -1.0;
 
 //-----------------------------------------------------------------------
 // Debugging
@@ -73,7 +74,6 @@ vec2 GetSphericalUv(vec3 v)
   return uv;
 }
 
-
 //-----------------------------------------------------------------------
 // Return the tangent and binormal from the incoming normal
 //-----------------------------------------------------------------------
@@ -110,6 +110,93 @@ vec3 OffsetRay(in vec3 p, in vec3 n)
   return vec3(abs(p.x) < origin ? p.x + floatScale * n.x : p_i.x,  //
               abs(p.y) < origin ? p.y + floatScale * n.y : p_i.y,  //
               abs(p.z) < origin ? p.z + floatScale * n.z : p_i.z);
+}
+
+// compact hdr color to 32bit
+// TODO: change tone mapping
+uint packYCbCr(in vec3 c) {
+  // c = pow(c, vec3(0.5, 0.5, 0.5));
+  c = c / (1.0 + c);
+  float y = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+  float cb = -0.16873589 * c.r -0.33126411 * c.g + 0.5 * c.b + 0.5;
+  float cr = 0.5 * c.r -0.41868759 * c.g -0.08131241 * c.b + 0.5;
+  uint outVal = uint(y * 65535.0) << 16;
+  outVal += uint(cb * 255.0) << 8;
+  outVal += uint(cr * 255.0);
+  return outVal;
+}
+vec3 unpackYCbCr(in uint c) {
+  float y = (c >> 16) / 65535.0;
+  float cb = ((c << 16) >> 24) / 255.0 - 0.5;
+  float cr = ((c << 24) >> 24) / 255.0 - 0.5;
+
+  float b = cb * 1.772 + y;
+  float r = y + 1.402 * cr;
+  float g = (y - 0.299 * r - 0.114 * b) / 0.587;
+  vec3 rgb = vec3(r, g, b);
+  // return pow(rgb / (1.0 - rgb), vec3(2,2,2));
+  return rgb / (1.0 - rgb);
+}
+
+uint hash8bit(uint a) {
+  return (a ^ (a >> 8)) << 24;
+}
+
+float getDepth(float z) { // untested
+  // return 2.0 * CAMERA_NEAR * CAMERA_FAR / (CAMERA_FAR + CAMERA_NEAR - z_n * (CAMERA_FAR - CAMERA_NEAR));
+  float A = CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  float B = CAMERA_NEAR * CAMERA_FAR / (CAMERA_NEAR - CAMERA_FAR);
+  return (z - B) / A;
+}
+float getZ(float depth) { // untested
+  return (CAMERA_FAR + CAMERA_NEAR) / (CAMERA_NEAR * CAMERA_FAR) * 0.5 + 0.5 - (CAMERA_FAR * CAMERA_NEAR / depth);
+}
+
+uint packTangent(vec3 n, vec3 t){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  float theta = acos(dot(t, T)) / M_PI;
+  float phi = acos(dot(t, B));
+  if (phi > M_PI_2) theta = -theta;
+  
+  return uint((theta + 1.0) * 32767.499);
+}
+vec3 unpackTangent(vec3 n, uint val){
+  vec3 T, B;
+  CreateCoordinateSystem(n, T, B);
+  float theta = (float(val & 0xFFFF) / 32767.499 - 1.0) * M_PI;
+  return normalize(cos(theta) * T + sin(theta) * B);
+}
+
+vec2 toConcentricDisk(vec2 r) {
+    float rx = sqrt(r.x);
+    float theta = r.y * 2.0 * M_PI;
+    return vec2(cos(theta), sin(theta)) * rx;
+}
+
+float powerHeuristic(float f, float g) {
+    float f2 = f * f;
+    return f2 / (f2 + g * g);
+}
+
+bool hasNan(vec3 v) {
+    return isnan(v.x) || isnan(v.y) || isnan(v.z);
+}
+
+bool inBound(ivec2 p, ivec2 pMin, ivec2 pMax) {
+    return p.x >= pMin.x && p.x < pMax.x && p.y >= pMin.y && p.y < pMax.y;
+}
+
+bool inBound(ivec2 p, ivec2 bound) {
+    return inBound(p, ivec2(0, 0), bound);
+}
+
+vec3 HDRToLDR(vec3 color) {
+    return color / (color + 1.0);
+}
+
+vec3 LDRToHDR(vec3 color) {
+    return color / (1.01 - color);
 }
 
 #endif  // RAYCOMMON_GLSL

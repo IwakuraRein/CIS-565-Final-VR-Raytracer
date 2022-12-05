@@ -21,7 +21,7 @@
 #pragma once
 #include "hdr_sampling.hpp"
 #include "nvvk/gizmos_vk.hpp"
-#include "renderer.h"
+#include "renderer.hpp"
 
  /*
 
@@ -63,6 +63,7 @@ typedef nvvk::ResourceAllocatorDedicated Allocator;
 
 #include "accelstruct.hpp"
 #include "render_output.hpp"
+#include "renderer.hpp"
 #include "scene.hpp"
 #include "shaders/host_device.h"
 
@@ -124,6 +125,7 @@ public:
 	nvvk::AxisVK       m_axis;
 	nvvk::RayPickerKHR m_picker;
 
+	//std::unique_ptr<Renderer> m_pRender;
 	std::unique_ptr<Renderer> m_pRender;
 
 	nvvk::Buffer m_sunAndSkyBuffer;
@@ -151,18 +153,33 @@ public:
 
 	RtxState m_rtxState{
 		0,       // frame;
-		8,       // maxDepth;
+		4,       // maxDepth;
 		1,       // samples per pixel;
 		1,       // fireflyClampThreshold;
 
 		1,       // hdrMultiplier;
 		0,       // debugging_mode;
-		0,       // pbrMode;
-		0.25f,
+		0.25f,   //environmentProb
+		0,       //time
+
+		eTemporal,       // ReSTIRState
+		4,		// RISSampleNum
+		80,      // clamp
+		0,       // accumulate
 
 		{0, 0},  // size;
-		0,       // minHeatmap;
-		65000,   // maxHeatmap;
+		0,       // environment map luminance integral inverse
+		0,
+		true,    // MIS
+		
+		0.4f,
+		0.1f,
+		0.02f,
+		true,    // denoiser params
+
+		4.f,
+		1.f,
+		1.f,
 		0
 	};
 
@@ -185,13 +202,13 @@ public:
 		0,                    // in_use;
 	};
 
-	int         m_maxFrames{ 100000 };
+	int         m_maxFrames{ 1000000 };
+	int         m_totalFrames{ -1 };
 	bool        m_showAxis{ true };
 	bool        m_descaling{ false };
 	int         m_descalingLevel{ 1 };
 	bool        m_busy{ false };
 	std::string m_busyReasonText;
-
 
 	std::shared_ptr<SampleGUI> m_gui;
 
