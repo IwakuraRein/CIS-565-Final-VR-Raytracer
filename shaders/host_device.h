@@ -132,7 +132,7 @@ END_ENUM();
 
 // Camera of the scene
 #define CAMERA_NEAR 0.001f
-#define CAMERA_FAR 100000.0f
+#define CAMERA_FAR 1000.0f
 struct SceneCamera
 {
 	mat4 viewInverse;
@@ -191,7 +191,7 @@ struct RtxState
 {
 	int frame;	  // Current frame, start at 0
 	int maxDepth; // How deep the path is
-	int spp;
+	int camChanged;
 	float fireflyClampThreshold; // to cut fireflies
 
 	float hdrMultiplier;   // To brightening the scene
@@ -244,7 +244,6 @@ struct LightSample {
 	vec3 Li;
 	vec3 wi;
 	float dist;
-	float pHat;
 };
 
 struct GISample {

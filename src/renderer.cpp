@@ -34,9 +34,20 @@
 #include "tools.hpp"
 
 #include "autogen/direct_stage.comp.h"
+#include "autogen/direct_gen.comp.h"
+#include "autogen/direct_reuse.comp.h"
 #include "autogen/indirect_stage.comp.h"
 #include "autogen/denoise_direct.comp.h"
 #include "autogen/denoise_indirect.comp.h"
+
+VkPipeline createComputePipeline(VkDevice device, VkComputePipelineCreateInfo createInfo, const uint32_t* shader, size_t bytes) {
+	VkPipeline pipeline;
+	auto shaderModule = nvvk::createShaderModule(device, shader, bytes);
+	createInfo.stage.module = shaderModule;
+	vkCreateComputePipelines(device, {}, 1, &createInfo, nullptr, &pipeline);
+	vkDestroyShaderModule(device, shaderModule, nullptr);
+	return pipeline;
+}
 
 void Renderer::setup(const VkDevice& device, const VkPhysicalDevice& physicalDevice, uint32_t familyIndex, nvvk::ResourceAllocator* allocator, uint32_t imageCount)
 {
@@ -63,6 +74,8 @@ void Renderer::destroy()
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
 	vkDestroyPipeline(m_device, m_directPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_directGenPipeline, nullptr);
+	vkDestroyPipeline(m_device, m_directReusePipeline, nullptr);
 	vkDestroyPipeline(m_device, m_indirectPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_denoiseDirectPipeline, nullptr);
 	vkDestroyPipeline(m_device, m_denoiseIndirectPipeline, nullptr);
@@ -99,30 +112,29 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	layout_info.pSetLayouts = rtDescSetLayouts.data();
 	vkCreatePipelineLayout(m_device, &layout_info, nullptr, &m_pipelineLayout);
 
-	VkComputePipelineCreateInfo computePipelineCreateInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-	computePipelineCreateInfo.layout = m_pipelineLayout;
-	computePipelineCreateInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, direct_stage_comp, sizeof(direct_stage_comp));
-	computePipelineCreateInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	computePipelineCreateInfo.stage.pName = "main";
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_directPipeline);
+	VkComputePipelineCreateInfo createInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+	createInfo.layout = m_pipelineLayout;
+	createInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	createInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	createInfo.stage.pName = "main";
+
+	m_directPipeline = createComputePipeline(m_device, createInfo, direct_stage_comp, sizeof(direct_stage_comp));
 	m_debug.setObjectName(m_directPipeline, "Renderer-Direct");
-	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, indirect_stage_comp, sizeof(indirect_stage_comp));
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_indirectPipeline);
+	m_directGenPipeline = createComputePipeline(m_device, createInfo, direct_gen_comp, sizeof(direct_gen_comp));
+	m_debug.setObjectName(m_directGenPipeline, "Render-Direct-Gen");
+
+	m_directReusePipeline = createComputePipeline(m_device, createInfo, direct_reuse_comp, sizeof(direct_reuse_comp));
+	m_debug.setObjectName(m_directReusePipeline, "Render-Direct-Reuse");
+
+	m_indirectPipeline = createComputePipeline(m_device, createInfo, indirect_stage_comp, sizeof(indirect_stage_comp));
 	m_debug.setObjectName(m_indirectPipeline, "Renderer-Indirect");
-	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, denoise_direct_comp, sizeof(denoise_direct_comp));
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_denoiseDirectPipeline);
+	m_denoiseDirectPipeline = createComputePipeline(m_device, createInfo, denoise_direct_comp, sizeof(denoise_direct_comp));
 	m_debug.setObjectName(m_denoiseDirectPipeline, "Denoise Direct");
-	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
-	computePipelineCreateInfo.stage.module = nvvk::createShaderModule(m_device, denoise_indirect_comp, sizeof(denoise_indirect_comp));
-	vkCreateComputePipelines(m_device, {}, 1, &computePipelineCreateInfo, nullptr, &m_denoiseIndirectPipeline);
+	m_denoiseIndirectPipeline = createComputePipeline(m_device, createInfo, denoise_indirect_comp, sizeof(denoise_indirect_comp));
 	m_debug.setObjectName(m_denoiseIndirectPipeline, "Denoise Indirect");
-	vkDestroyShaderModule(m_device, computePipelineCreateInfo.stage.module, nullptr);
 
 	timer.print();
 }
@@ -143,12 +155,21 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	// Sending the push constant information
 	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &state);
 
+	/*
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+	*/
+
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directGenPipeline);
+	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directReusePipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 
 	ivec2 indSize = state.size / 2;
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
 	vkCmdDispatch(cmdBuf, (indSize[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (indSize[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+
 
 	for (int i = 0; i < 4; i++) {
 		cState.denoiseLevel = i;

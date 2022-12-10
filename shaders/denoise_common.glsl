@@ -98,7 +98,8 @@ vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHa
         }
     }
     vec3 res = (sumWeight < 1e-5) ? vec3(0.0) : sum / sumWeight;
-    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0) {
+    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0 ||
+        res.x > 1e8 || res.y > 1e8 || res.z > 1e8) {
         res = vec3(0.0);
     }
     return res;

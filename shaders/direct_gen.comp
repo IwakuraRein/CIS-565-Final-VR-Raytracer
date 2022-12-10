@@ -1,0 +1,150 @@
+#version 460
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_ray_tracing : enable
+#extension GL_EXT_ray_query : enable
+#extension GL_ARB_shader_clock : enable                 // Using clockARB
+#extension GL_EXT_shader_image_load_formatted : enable  // The folowing extension allow to pass images as function parameters
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference2 : require
+
+#include "host_device.h"
+
+layout(push_constant) uniform _RtxState {
+  RtxState rtxState;
+};
+
+#include "globals.glsl"
+
+PtPayload prd;
+ShadowHitPayload shadow_payload;
+ivec2 imageCoords;
+
+#include "layouts.glsl"
+#include "random.glsl"
+#include "common.glsl"
+#include "traceray_rq.glsl"
+
+#include "pathtrace.glsl"
+
+#define FIREFLIES 1
+
+#ifndef SWIZZLED
+layout(local_size_x = 8, local_size_y = 8) in;
+#else
+layout(local_size_x = 32, local_size_y = 2) in;
+#extension GL_EXT_shader_8bit_storage : enable  // Using uint_8 ...
+ivec2 SampleSizzled() {
+  // Sampling Swizzling
+  // Convert 32x2 to 8x8, where the sampling will follow how invocation are done in a subgroup.
+  // layout(local_size_x = 32, local_size_y = 2) in;
+  ivec2 base = ivec2(gl_WorkGroupID.xy) * 8;
+  ivec2 subset = ivec2(int(gl_LocalInvocationID.x) & 1, int(gl_LocalInvocationID.x) / 2);
+  subset += gl_LocalInvocationID.x >= 16 ? ivec2(2, -8) : ivec2(0, 0);
+  subset += ivec2(gl_LocalInvocationID.y * 4, 0);
+  return base + subset;
+}
+#endif
+
+uvec4 encodeGeometryInfo(State state, float depth) {
+    uvec4 gInfo;
+    gInfo.x = floatBitsToUint(depth);
+    gInfo.y = compress_unit_vec(state.normal);
+    gInfo.z = packUnorm4x8(vec4(state.mat.metallic, state.mat.roughness, (state.mat.ior-1.0) / MAX_IOR_MINUS_ONE, state.mat.transmission));
+    gInfo.w = packUnorm4x8(vec4(state.mat.albedo, 1.0)) & 0xFFFFFF; //agbr
+    gInfo.w += hash8bit(state.matID);
+    return gInfo;
+}
+
+void updateGeometryAlbedo(inout uvec4 gInfo, vec3 albedo) {
+    uint matId = gInfo.w & 0xff000000u;
+    gInfo.w = (packUnorm4x8(vec4(albedo, 1.0)) & 0x00ffffffu) | matId;
+}
+
+vec2 createMotionVector(vec3 wpos) {
+    vec4 proj = sceneCamera.lastProjView * vec4(wpos, 1.0);
+    vec3 ndc = proj.xyz / proj.w;
+    return ndc.xy * 0.5 + 0.5;
+}
+
+ivec2 createMotionIndex(vec3 wpos) {
+    return ivec2(createMotionVector(wpos) * vec2(rtxState.size));
+}
+
+void generateGeometryAndReservoir(Ray r) {
+    int index = imageCoords.y * rtxState.size.x + imageCoords.x;
+    ClosestHit(r);
+
+    DirectReservoir resv;
+    resvReset(resv);
+
+    if (prd.hitT >= INFINITY * 0.8) {
+        uvec4 gInfo = uvec4(floatBitsToUint(INFINITY), 0, 0, InvalidMatId);
+        updateGeometryAlbedo(gInfo, EnvRadiance(r.direction));
+        imageStore(thisGbuffer, imageCoords, gInfo);
+        imageStore(motionVector, imageCoords, ivec4(0, 0, 0, 0));
+        thisDirectResv[index] = resv;
+        return;
+    }
+    State state = GetState(prd, r.direction);
+    GetMaterials(state, r);
+    
+    ivec2 motionIdx = createMotionIndex(state.position);
+    imageStore(motionVector, imageCoords, ivec4(motionIdx, 0, 0));
+
+    uvec4 gInfo = encodeGeometryInfo(state, prd.hitT);
+
+    if (rtxState.debugging_mode > eIndirectStage) {
+        updateGeometryAlbedo(gInfo, DebugInfo(state));
+    }
+    else if (state.isEmitter) {
+        updateGeometryAlbedo(gInfo, state.mat.emission);
+    }
+    else {
+        vec3 wo = -r.direction;
+        vec3 direct = vec3(0.0);
+        vec3 albedo = state.mat.albedo;
+        state.mat.albedo = vec3(1.0);
+
+        int sampleNum = (rtxState.ReSTIRState == eNone) ? 1 : rtxState.RISSampleNum;
+
+        for (int i = 0; i < rtxState.RISSampleNum; i++) {
+            LightSample lsample;
+            float p = SampleDirectLightNoVisibility(state.position, lsample);
+
+            vec3 pHat = lsample.Li * Eval(state, wo, state.ffnormal, lsample.wi, dummyPdf) * absDot(state.ffnormal, lsample.wi);
+            float weight = resvToScalar(pHat / p);
+
+            if (IsPdfInvalid(p) || isnan(weight)) {
+                weight = 0.0;
+            }
+            resvUpdate(resv, lsample, weight, rand(prd.seed));
+        }
+        LightSample lsample = resv.lightSample;
+        Ray shadowRay;
+        shadowRay.origin = OffsetRay(state.position, state.ffnormal);
+        shadowRay.direction = lsample.wi;
+
+        if (Occlusion(shadowRay, state, lsample.dist)) {
+            resv.weight = 0.0;
+        }   
+    }
+    imageStore(thisGbuffer, imageCoords, gInfo);
+    thisDirectResv[index] = resv;
+}
+
+void main() {
+    ivec2 imageRes = rtxState.size;
+    imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+    if (imageCoords.x >= imageRes.x || imageCoords.y >= imageRes.y) {
+        return;
+    }
+  
+    prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
+    Ray ray = raySpawn(imageCoords, ivec2(imageRes));
+
+    generateGeometryAndReservoir(ray);
+}

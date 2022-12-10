@@ -199,4 +199,17 @@ vec3 LDRToHDR(vec3 color) {
     return color / (1.01 - color);
 }
 
+vec3 colorWheel(float x)
+{
+    const float Div = 1.0 / 4.0;
+    if (x < Div)
+        return vec3(0.0, x / Div, 1.0);
+    else if (x < Div * 2)
+        return vec3(0.0, 1.0, 2.0 - x / Div);
+    else if (x < Div * 3)
+        return vec3(x / Div - 2.0, 1.0, 0.0);
+    else
+        return vec3(1.0, 4.0 - x / Div, 0.0);
+}
+
 #endif  // RAYCOMMON_GLSL

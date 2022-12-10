@@ -100,11 +100,15 @@ private:
   VkDescriptorSetLayout m_descSetLayout{ VK_NULL_HANDLE };
   std::array<VkDescriptorSet, 2> m_descSet{ VK_NULL_HANDLE };
 
-  VkPipelineLayout m_pipelineLayout{ VK_NULL_HANDLE };
-  VkPipeline       m_directPipeline{ VK_NULL_HANDLE };
-  VkPipeline       m_indirectPipeline{ VK_NULL_HANDLE };
-  VkPipeline       m_denoiseDirectPipeline{ VK_NULL_HANDLE };
-  VkPipeline       m_denoiseIndirectPipeline{ VK_NULL_HANDLE };
+  VkPipelineLayout  m_pipelineLayout{ VK_NULL_HANDLE };
+
+  VkPipeline m_directPipeline{ VK_NULL_HANDLE };
+  VkPipeline m_directGenPipeline{ VK_NULL_HANDLE };
+  VkPipeline m_directReusePipeline{ VK_NULL_HANDLE };
+  VkPipeline m_indirectPipeline{ VK_NULL_HANDLE };
+
+  VkPipeline m_denoiseDirectPipeline{ VK_NULL_HANDLE };
+  VkPipeline m_denoiseIndirectPipeline{ VK_NULL_HANDLE };
 
   VkExtent2D m_size{};
   int m_frameInd = 0;

@@ -1,28 +1,3 @@
-/*
- * Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION
- * SPDX-License-Identifier: Apache-2.0
- */
-
- //-------------------------------------------------------------------------------------------------
- // This file is the main function for the path tracer.
- // * `samplePixel()` is setting a ray from the camera origin through a pixel (jitter)
- // * `IndirectSample()` will loop until the ray depth is reached or the environment is hit.
- // * `DirectLight()` is the contribution at the hit, if the shadow ray is not hitting anything.
-
 #define ENVMAP 1
 #define RR 1        // Using russian roulette
 #define RR_DEPTH 0  // Minimum depth
@@ -291,12 +266,97 @@ Ray raySpawn(ivec2 coord, ivec2 sizeImage) {
     vec4 origin = sceneCamera.viewInverse * vec4(0, 0, 0, 1);
     vec4 target = sceneCamera.projInverse * vec4(d.x, d.y, 1, 1);
     vec4 direction = sceneCamera.viewInverse * vec4(normalize(target.xyz), 0);
-    return Ray(origin.xyz, direction.xyz);
+    return Ray(origin.xyz, normalize(direction.xyz));
 }
 
 vec3 getCameraPos(ivec2 coord, float dist) {
     Ray ray = raySpawn(coord, rtxState.size);
     return ray.origin + ray.direction * dist;
+}
+
+bool getDirectStateFromGBuffer(uimage2D gBuffer, Ray ray, out State state, out float depth) {
+    uvec4 gInfo = imageLoad(gBuffer, imageCoords);
+    depth = uintBitsToFloat(gInfo.x);
+    if (depth >= INFINITY * 0.8)
+        return false;
+    state.position = ray.origin + ray.direction * depth;
+    state.normal = decompress_unit_vec(gInfo.y);
+    state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+
+    state.mat.albedo = unpackUnorm4x8(gInfo.w).xyz;
+    vec4 matInfo = unpackUnorm4x8(gInfo.z);
+    state.mat.metallic = matInfo.x;
+    state.mat.roughness = matInfo.y;
+    state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
+    state.mat.transmission = matInfo.w;
+    state.matID = gInfo.w >> 24;
+    return true;
+}
+
+bool getIndirectStateFromGBuffer(uimage2D gBuffer, Ray ray, out State state, out float depth) {
+#if !FETCH_GEOM_CHECK_4_SUBPIXELS
+    uvec4 gInfo = imageLoad(gBuffer, imageCoords * 2);
+    depth = uintBitsToFloat(gInfo.x);
+    if (depth >= INFINITY * 0.8)
+        return false;
+    state.position = ray.origin + ray.direction * depth;
+    state.normal = decompress_unit_vec(gInfo.y);
+    state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+
+    // Filling material structures
+    state.mat.albedo = unpackUnorm4x8(gInfo.w).xyz;
+    vec4 matInfo = unpackUnorm4x8(gInfo.z);
+    state.mat.metallic = matInfo.x;
+    state.mat.roughness = matInfo.y;
+    state.mat.ior = matInfo.z * MAX_IOR_MINUS_ONE + 1.f;
+    state.mat.transmission = matInfo.w;
+    state.matID = gInfo.w >> 24; // hashed matarial id
+#else
+    uvec4 gInfo00 = imageLoad(gBuffer, imageCoords * 2 + ivec2(0, 0));
+    uvec4 gInfo10 = imageLoad(gBuffer, imageCoords * 2 + ivec2(1, 0));
+    uvec4 gInfo11 = imageLoad(gBuffer, imageCoords * 2 + ivec2(1, 1));
+    uvec4 gInfo01 = imageLoad(gBuffer, imageCoords * 2 + ivec2(0, 1));
+
+    depth = (uintBitsToFloat(gInfo00.x) + uintBitsToFloat(gInfo10.x) + uintBitsToFloat(gInfo11.x) +
+        uintBitsToFloat(gInfo01.x)) * 0.25;
+
+    if (depth >= INFINITY - EPS * 10.0)
+        return false;
+
+    state.position = ray.origin + ray.direction * depth;
+    state.normal = (decompress_unit_vec(gInfo00.y) + decompress_unit_vec(gInfo10.y) + decompress_unit_vec(gInfo11.y) +
+        decompress_unit_vec(gInfo01.y)) * 0.25;
+    state.ffnormal = dot(state.normal, ray.direction) <= 0.0 ? state.normal : -state.normal;
+
+    // Filling material structures
+    state.mat.albedo = (unpackUnorm4x8(gInfo00.w).xyz + unpackUnorm4x8(gInfo10.w).xyz +
+        unpackUnorm4x8(gInfo11.w).xyz + unpackUnorm4x8(gInfo01.w).xyz) * 0.25;
+
+    vec4 matInfo00 = unpackUnorm4x8(gInfo00.z);
+    vec4 matInfo10 = unpackUnorm4x8(gInfo10.z);
+    vec4 matInfo11 = unpackUnorm4x8(gInfo11.z);
+    vec4 matInfo01 = unpackUnorm4x8(gInfo01.z);
+
+    state.mat.metallic = (matInfo00.x + matInfo10.x + matInfo11.x + matInfo01.x) * 0.25;
+    state.mat.roughness = (matInfo00.y + matInfo10.y + matInfo11.y + matInfo01.y) * 0.25;
+    state.mat.ior = (matInfo00.z + matInfo10.z + matInfo11.z + matInfo01.z) * 0.25 * MAX_IOR_MINUS_ONE + 1.f;
+    state.mat.transmission = (matInfo00.w + matInfo01.w + matInfo11.w + matInfo10.w) * 0.25;
+
+    float r = rand(prd.seed);
+    if (r < 0.25) {
+        state.matID = gInfo00.w >> 24;
+    }
+    else if (r < 0.5) {
+        state.matID = gInfo10.w >> 24;
+    }
+    else if (r < 0.75) {
+        state.matID = gInfo11.w >> 24;
+    }
+    else {
+        state.matID = gInfo01.w >> 24;
+    }
+#endif
+    return true;
 }
 
 vec3 DebugInfo(in State state) {

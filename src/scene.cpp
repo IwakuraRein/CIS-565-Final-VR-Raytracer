@@ -789,7 +789,6 @@ void Scene::updateCamera(const VkCommandBuffer& cmdBuf, VkExtent2D size)
 	m_camera.lastView = nvmath::invert(m_camera.viewInverse);
 	m_camera.viewInverse = nvmath::invert(view);
 	m_camera.projInverse = nvmath::invert(proj);
-	//m_camera.projView = nvmath::invert(proj * view); //?
 	m_camera.projView = proj * view;
 
 	m_camera.lastPosition = eye;
