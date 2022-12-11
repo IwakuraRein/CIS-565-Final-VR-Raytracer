@@ -28,6 +28,7 @@
 
 #define TONEMAP_UNCHARTED
 #include "random.glsl"
+#include "compress.glsl"
 #include "tonemapping.glsl"
 #include "host_device.h"
 
@@ -41,6 +42,8 @@ layout(push_constant) uniform _PushConstant {
   Tonemapper tm;
   int debugging_mode;
 };
+
+vec2 indCoord;
 
 // http://www.thetenthplanet.de/archives/5367
 // Apply dithering to hide banding artifacts.
@@ -76,16 +79,16 @@ vec3 toneLocalExposure(vec3 RGB, float logAvgLum) {
     if(debugging_mode == eDirectStage)
       v1 = luminance(texture(inDirectImage, uvCoords * tm.zoom, i).rgb) * factor;
     else if(debugging_mode == eIndirectStage)
-      v1 = luminance(texture(inIndirectImage, uvCoords * tm.zoom, i).rgb) * factor;
+      v1 = luminance(texture(inIndirectImage, indCoord * tm.zoom, i).rgb) * factor;
     else
-      v1 = luminance(texture(inDirectImage, uvCoords * tm.zoom, i).rgb + texture(inIndirectImage, uvCoords * tm.zoom, i).rgb) * factor;
+      v1 = luminance(texture(inDirectImage, uvCoords * tm.zoom, i).rgb + texture(inIndirectImage, indCoord * tm.zoom, i).rgb) * factor;
     float v2;
     if(debugging_mode == eDirectStage)
       v2 = luminance(texture(inDirectImage, uvCoords * tm.zoom, i + 1).rgb) * factor;
     else if(debugging_mode == eIndirectStage)
-      v2 = luminance(texture(inIndirectImage, uvCoords * tm.zoom, i + 1).rgb) * factor;
+      v2 = luminance(texture(inIndirectImage, indCoord * tm.zoom, i + 1).rgb) * factor;
     else
-      v2 == luminance(texture(inDirectImage, uvCoords * tm.zoom, i + 1).rgb + texture(inDirectImage, uvCoords * tm.zoom, i + 1).rgb) * factor;
+      v2 == luminance(texture(inDirectImage, uvCoords * tm.zoom, i + 1).rgb + texture(inDirectImage, indCoord * tm.zoom, i + 1).rgb) * factor;
     if(abs(v1 - v2) / ((tm.key * pow(2, phi) / (scale[i] * scale[i])) + v1) > epsilon) {
       La = v1;
       break;
@@ -98,6 +101,8 @@ vec3 toneLocalExposure(vec3 RGB, float logAvgLum) {
 }
 
 void main() {
+  indCoord = uvCoords;
+
   if (debugging_mode == eDepth){
     float depth = texture(inDirectImage, uvCoords * tm.zoom).w;
     depth *= pow(2, tm.brightness);
@@ -106,7 +111,7 @@ void main() {
     fragColor = vec4(depth, depth, depth, 1.0);
   }
   else if(debugging_mode > eIndirectStage) {
-    vec3 color = texture(inDirectImage, uvCoords * tm.zoom).xyz;
+    vec3 color = texture(inDirectImage, indCoord * tm.zoom).xyz;
     if (debugging_mode == eBaseColor)
       color = clamp(pow(color, vec3(0.45454545454545)), 0, 1);
     fragColor = vec4(color, 1.0);
@@ -117,9 +122,10 @@ void main() {
     if(debugging_mode == eDirectStage)
       hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba;
     else if(debugging_mode == eIndirectStage)
-      hdr = texture(inIndirectImage, uvCoords * tm.zoom).rgba;
+      hdr = texture(inIndirectImage, indCoord * tm.zoom).rgba;
     else
-      hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, uvCoords * tm.zoom).rgba;
+      hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, indCoord * tm.zoom).rgba;
+
     hdr.w = 1.0;
     if(((tm.autoExposure >> 0) & 1) == 1) {
       vec4 avg; // Get the average value of the image

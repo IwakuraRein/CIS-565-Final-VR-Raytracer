@@ -207,12 +207,12 @@ void RenderOutput::createPostDescriptor()
 
   std::vector<VkWriteDescriptorSet> writes;
   for (int i = 0; i < 2; i++) {
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eDirectSampler, &m_directResult[i].descriptor));  // This is use by the tonemapper
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eIndirectSampler, &m_indirectResult[i].descriptor));  // This is use by the tonemapper
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisDirectResult, &m_directResult[i].descriptor));  // This will be used by the ray trace to write the image
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastDirectResult, &m_directResult[!i].descriptor));  // This will be used by the ray trace to write the image
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisIndirectResult, &m_indirectResult[i].descriptor));  // This will be used by the ray trace to write the image
-      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastIndirectResult, &m_indirectResult[!i].descriptor));  // This will be used by the ray trace to write the image
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eDirectSampler, &m_directResult[i].descriptor));
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eIndirectSampler, &m_indirectResult[i].descriptor));
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisDirectResult, &m_directResult[i].descriptor));
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastDirectResult, &m_directResult[!i].descriptor));
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eThisIndirectResult, &m_indirectResult[i].descriptor));
+      writes.emplace_back(m_bind.makeWrite(m_postDescSet[i], OutputBindings::eLastIndirectResult, &m_indirectResult[!i].descriptor));
 
       vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
   }

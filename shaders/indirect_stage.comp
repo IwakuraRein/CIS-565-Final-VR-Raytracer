@@ -33,24 +33,8 @@ ivec2 imageCoords;
 #define FIREFLIES 1
 #define TILED_MULTIBOUNCE 1
 #define FETCH_GEOM_CHECK_4_SUBPIXELS 0
-#define PRE_UPSCALE 1
 
-#ifndef SWIZZLED
-layout(local_size_x = 8, local_size_y = 8) in;
-#else
-layout(local_size_x = 32, local_size_y = 2) in;
-#extension GL_EXT_shader_8bit_storage : enable  // Using uint_8 ...
-ivec2 SampleSizzled() {
-  // Sampling Swizzling
-  // Convert 32x2 to 8x8, where the sampling will follow how invocation are done in a subgroup.
-  // layout(local_size_x = 32, local_size_y = 2) in;
-  ivec2 base = ivec2(gl_WorkGroupID.xy) * 8;
-  ivec2 subset = ivec2(int(gl_LocalInvocationID.x) & 1, int(gl_LocalInvocationID.x) / 2);
-  subset += gl_LocalInvocationID.x >= 16 ? ivec2(2, -8) : ivec2(0, 0);
-  subset += ivec2(gl_LocalInvocationID.y * 4, 0);
-  return base + subset;
-}
-#endif
+layout(local_size_x = RayTraceBlockSizeX, local_size_y = RayTraceBlockSizeY) in;
 
 #if TILED_MULTIBOUNCE
 shared bool multiBounce;
@@ -92,26 +76,47 @@ bool findTemporalNeighbor(
 ) {
     vec3 pnorm; float pdepth; uint matHash;
     
+    /*
     loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
-    if (inBound(lastCoord, rtxState.size)) {
+    ivec2 coord = lastCoord / 2;
+    
+    if (inBound(coord, indSize())) {
         if (hash8bit(matId) == matHash) {
             if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
-                resv = lastIndirectResv[(lastCoord.y / 2) * indSize().x + (lastCoord.x / 2)];
+                resv = lastIndirectResv[coord.y * indSize().x + coord.x];
                 return true;
             }
         }
     }
+    */
+
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            ivec2 coord = (lastCoord + ivec2(i, j)) / 2;
+            loadLastGeometryInfo(lastCoord + ivec2(i, j), pnorm, pdepth, matHash);
+    
+            if (inBound(coord, indSize())) {
+                if (hash8bit(matId) == matHash) {
+                    if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
+                        resv = lastIndirectResv[coord.y * indSize().x + coord.x];
+                        return true;
+                    }
+                }
+            }
+        }
+    }
     /*
-    for (int i = -1; i <= 1; i++) {
-        for (int j = -1; j <= 1; j++) {
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
             ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
-            loadLastGeometryInfo(coord, pnorm, pdepth, matHash);
+            loadLastGeometryInfo(coord * 2, pnorm, pdepth, matHash);
+
             if (!inBound(coord, indSize())) {
                 continue;
             }
             else if (hash8bit(matId) != matHash)
                 continue;
-            else if (dot(norm, pnorm) < 0.5 || reprojDepth  > pdepth * 1.05) {
+            else if (dot(norm, pnorm) < 0.1 || reprojDepth > pdepth * 1.05) {
                 continue;
             }
             resv = lastIndirectResv[coord.y * indSize().x + coord.x];
@@ -199,12 +204,12 @@ void pathTraceIndirect(
                 float weight = MIS(samplePdf, lightPdf);
                 giSample.L += Li * throughput * weight;
             }
-            // else {
-            //     // Hack here. To let samples from the infinity light able to be temporally reused
-            //     // giSample.matInfo = uvec2(0xFFFFFFFF, 0xFFFFFFFF);
-            //     giSample.xs = state.position + sampleWi * INFINITY * 0.8;
-            //     giSample.ns = -sampleWi;
-            // }
+             else {
+                 // Hack here. To let samples from the infinity light able to be temporally reused
+                 // giSample.matInfo = uvec2(0xFFFFFFFF, 0xFFFFFFFF);
+                 giSample.xs = state.position + sampleWi * INFINITY * 0.8;
+                 giSample.ns = -sampleWi;
+             }
             break;
         }
 
@@ -218,10 +223,10 @@ void pathTraceIndirect(
                 float weight = MIS(samplePdf, lightPdf);
                 giSample.L += Li * throughput * weight;
             }
-            // else {
-            //     giSample.xs = state.position;
-            //     giSample.ns = state.ffnormal;
-            // }
+             else {
+                 giSample.xs = state.position;
+                 giSample.ns = state.ffnormal;
+             }
             break;
         }
 
@@ -263,7 +268,7 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
     resvUpdate(resv, giSample, sampleWeight, rand(prd.seed));
 
     resvCheckValidity(resv);
-    resvClamp(resv, rtxState.reservoirClamp / 2);
+    resvClamp(resv, rtxState.reservoirClamp * 2);
     saveNewReservoir(resv);
    
     giSample = resv.giSample;
@@ -277,8 +282,9 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
         primState.mat.albedo = vec3(1.0);
         indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
     }
-
-    return HDRToLDR(clampRadiance(indirect));
+    vec3 res = clampRadiance(indirect);
+    res = HDRToLDR(res);
+    return res;
 }
 
 void main() {
@@ -305,14 +311,7 @@ void main() {
   State state;
   float depth;
   if (!getIndirectStateFromGBuffer(thisGbuffer, ray, state, depth)) {
-#if PRE_UPSCALE
-    imageStore(thisIndirectResultImage, p00, vec4(0.0));
-    imageStore(thisIndirectResultImage, p10, vec4(0.0));
-    imageStore(thisIndirectResultImage, p11, vec4(0.0));
-    imageStore(thisIndirectResultImage, p01, vec4(0.0));
-#else
     imageStore(thisIndirectResultImage, imageCoords, vec4(0.0));
-#endif
     return;
   }
 #if FETCH_GEOM_CHECK_4_SUBPIXELS
@@ -324,34 +323,9 @@ void main() {
   float primSamplePdf; vec3 primWo; State primState; GISample giSample;
 
   pathTraceIndirect(state, ray, primSamplePdf, primWo, primState, giSample);
-
   vec3 pixelColor = ReSTIRIndirect(depth, primSamplePdf, primWo, primState, giSample);
+
   pixelColor = clampRadiance(pixelColor);
-
-  ivec2 motionIdx = imageLoad(motionVector, imageCoords * 2).xy;
-  vec3 lastColor;
-  if (inBound(motionIdx, rtxState.size)) {
-    lastColor = imageLoad(lastIndirectResultImage, motionIdx / 2).rgb;
-  }
-  else {
-    lastColor = pixelColor;
-  }
-
-  //vec4 c00 = vec4(mix(lastColor, pixelColor, 0.125), 1.0);
   vec4 c00 = vec4(pixelColor, 1.0);
-#if !PRE_UPSCALE
   imageStore(thisIndirectResultImage, imageCoords, c00);
-  return;
-#else
-  imageStore(thisIndirectResultImage, imageCoords * 2, c00);
-  barrier();
-
-  vec4 c10 = imageLoad(thisIndirectResultImage, p10 + ivec2(1, 0));
-  vec4 c11 = imageLoad(thisIndirectResultImage, p11 + ivec2(1, 1));
-  vec4 c01 = imageLoad(thisIndirectResultImage, p01 + ivec2(0, 1));
-  barrier();
-  imageStore(thisIndirectResultImage, p10, (c00 + c10) * 0.5);
-  imageStore(thisIndirectResultImage, p11, (c00 + c10 + c11 + c01) * 0.25);
-  imageStore(thisIndirectResultImage, p01, (c00 + c01) * 0.5);
-#endif
 }

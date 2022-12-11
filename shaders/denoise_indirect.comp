@@ -14,17 +14,87 @@
 
 #include "denoise_common.glsl"
 
-layout(local_size_x = 8, local_size_y = 8) in;
+layout(local_size_x = DenoiseBlockSizeX, local_size_y = DenoiseBlockSizeY) in;
+
+ivec2 indSize() {
+    return rtxState.size / 2;
+}
+
+vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHash,
+    float sigLumin, float sigNormal, float sigDepth, int level
+) {
+    if (matHash == InvalidMatId) {
+        return vec3(0.0);
+    }
+    int step = 1 << level;
+
+    vec3 sum = vec3(0.0);
+    float sumWeight = 0.0;
+
+    vec3 color = imageLoad(inImage, coord).rgb;
+
+    for (int j = -2; j <= 2; j++) {
+        for (int i = -2; i <= 2; i++) {
+            ivec2 q = coord + ivec2(i, j) * step;
+            if (q.x >= indSize().x || q.y >= indSize().y ||
+                q.x < 0 || q.y < 0) {
+                continue;
+            }
+
+            vec3 normQ; vec3 posQ; uint matHashQ;
+            loadThisGeometry(q * 2, normQ, posQ, matHashQ, indSize());
+            vec3 colorQ = imageLoad(inImage, q).rgb;
+
+            if (matHash != matHashQ || matHashQ == InvalidMatId) {
+                continue;
+            }
+
+            float var = sigLumin;
+            //float distColor = abs(luminance(color) - luminance(colorQ));
+            float distColor = dot(color - colorQ, color - colorQ);
+            float wColor = exp(-distColor / var) + 1e-2;
+            //float wColor = exp(-distColor / rtxState.sigLumin) + 1e-3;
+
+            float distNorm2 = dot(norm - normQ, norm - normQ);
+            float wNorm = min(1.0, exp(-distNorm2 / sigNormal));
+
+            float distPos2 = dot(pos - posQ, pos - posQ);
+            float wDepth = exp(-distPos2 / sigDepth) + 1e-2;
+
+            float weight = wColor * wNorm * wDepth * Gaussian5x5[i + 2][j + 2];
+            sum += colorQ * weight;
+            sumWeight += weight;
+        }
+    }
+    vec3 res = (sumWeight < 1e-5) ? vec3(0.0) : sum / sumWeight;
+    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0 ||
+        res.x > 1e8 || res.y > 1e8 || res.z > 1e8) {
+        res = vec3(0.0);
+    }
+    return res;
+}
 
 void main() {
 	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    if (!inBound(coord, rtxState.size) || rtxState.denoise == 0) {
+    if (!inBound(coord, indSize())) {
+        return;
+    }
+
+    if (rtxState.denoise == 0) {
+        imageStore(denoiseTempA, coord, imageLoad(thisIndirectResultImage, coord));
         return;
     }
 
     vec3 albedo; vec3 norm; vec3 pos; uint matHash;
-    loadThisGeometry(coord, albedo, norm, pos, matHash);
+    loadThisGeometry(coord * 2, albedo, norm, pos, matHash, indSize());
 
+#if DENOISER_INDIRECT_BILATERAL
+    {
+        /*
+        vec3 res = bilateralFilter(thisIndirectResultImage, coord, norm, pos, matHash,
+            rtxState.sigLuminIndirect, rtxState.sigNormalIndirect, rtxState.sigDepthIndirect);
+        */
+#else
     if (rtxState.denoiseLevel == 0) {
         vec3 res = waveletFilter(thisIndirectResultImage, coord, norm, pos, matHash,
             rtxState.sigLuminIndirect, rtxState.sigNormalIndirect, rtxState.sigDepthIndirect, 0);
@@ -48,11 +118,8 @@ void main() {
     else if (rtxState.denoiseLevel == 4) {
         vec3 res = waveletFilter(denoiseTempB, coord, norm, pos, matHash,
             rtxState.sigLuminIndirect, rtxState.sigNormalIndirect, rtxState.sigDepthIndirect, 4);
+#endif
+        res = LDRToHDR(res);
         imageStore(denoiseTempA, coord, vec4(res, 1.0));
-    }
-    else if (rtxState.denoiseLevel == 5) {
-        vec3 res = LDRToHDR(waveletFilter(denoiseTempA, coord, norm, pos, matHash,
-            rtxState.sigLuminIndirect, rtxState.sigNormalIndirect, rtxState.sigDepthIndirect, 5)) * albedo;
-        imageStore(thisIndirectResultImage, coord, vec4(res, 1.0));
     }
 }

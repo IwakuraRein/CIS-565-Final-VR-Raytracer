@@ -1,3 +1,6 @@
+#ifndef DENOISE_COMMON_GLSL
+#define DENOISE_COMMON_GLSL
+
 #include "host_device.h"
 #include "globals.glsl"
 #include "layouts.glsl"
@@ -31,76 +34,24 @@ Ray raySpawn(ivec2 coord, ivec2 sizeImage) {
     return Ray(origin.xyz, direction.xyz);
 }
 
-vec3 getCameraPos(ivec2 coord, float dist) {
-    Ray ray = raySpawn(coord, rtxState.size);
+vec3 getCameraPos(ivec2 coord, float dist, ivec2 imageSize) {
+    Ray ray = raySpawn(coord, imageSize);
     return ray.origin + ray.direction * dist;
 }
 
-void loadThisGeometry(ivec2 coord, out vec3 normal, out vec3 pos, out uint matHash) {
+void loadThisGeometry(ivec2 coord, out vec3 normal, out vec3 pos, out uint matHash, ivec2 imageSize) {
     uvec4 gInfo = imageLoad(thisGbuffer, coord);
     normal = decompress_unit_vec(gInfo.y);
-    pos = getCameraPos(coord, uintBitsToFloat(gInfo.x));
+    pos = getCameraPos(coord, uintBitsToFloat(gInfo.x), imageSize);
     matHash = gInfo.w & 0xFF000000;
 }
 
-void loadThisGeometry(ivec2 coord, out vec3 albedo, out vec3 normal, out vec3 pos, out uint matHash) {
+void loadThisGeometry(ivec2 coord, out vec3 albedo, out vec3 normal, out vec3 pos, out uint matHash, ivec2 imageSize) {
     uvec4 gInfo = imageLoad(thisGbuffer, coord);
     albedo = unpackUnorm4x8(gInfo.w).rgb;
     normal = decompress_unit_vec(gInfo.y);
-    pos = getCameraPos(coord, uintBitsToFloat(gInfo.x));
+    pos = getCameraPos(coord, uintBitsToFloat(gInfo.x), imageSize);
     matHash = gInfo.w & 0xFF000000;
 }
 
-vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHash,
-    float sigLumin, float sigNormal, float sigDepth, int level
-) {
-    if (matHash == InvalidMatId) {
-        return vec3(0.0);
-    }
-    int step = 1 << level;
-
-    vec3 sum = vec3(0.0);
-    float sumWeight = 0.0;
-
-    vec3 color = imageLoad(inImage, coord).rgb;
-
-    for (int i = -2; i <= 2; i++) {
-        for (int j = -2; j <= 2; j++) {
-            ivec2 q = coord + ivec2(i, j) * step;
-            if (q.x >= rtxState.size.x || q.y >= rtxState.size.y ||
-                q.x < 0 || q.y < 0) {
-                continue;
-            }
-
-            vec3 normQ; vec3 posQ; uint matHashQ;
-            loadThisGeometry(q, normQ, posQ, matHashQ);
-            vec3 colorQ = imageLoad(inImage, q).rgb;
-
-            if (matHash != matHashQ || matHashQ == InvalidMatId) {
-                continue;
-            }
-
-            float var = sigLumin;
-            float distColor = abs(luminance(color) - luminance(colorQ));
-            float wColor = exp(-distColor / var) + 1e-2;
-            //float distColor = dot(color - colorQ, color - colorQ);
-            //float wColor = exp(-distColor / rtxState.sigLumin) + 1e-3;
-
-            float distNorm2 = dot(norm - normQ, norm - normQ);
-            float wNorm = min(1.0, exp(-distNorm2 / sigNormal));
-
-            float distPos2 = dot(pos - posQ, pos - posQ);
-            float wDepth = exp(-distPos2 / sigDepth) + 1e-2;
-
-            float weight = wColor * wNorm * wDepth * Gaussian5x5[i + 2][j + 2];
-            sum += colorQ * weight;
-            sumWeight += weight;
-        }
-    }
-    vec3 res = (sumWeight < 1e-5) ? vec3(0.0) : sum / sumWeight;
-    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0 ||
-        res.x > 1e8 || res.y > 1e8 || res.z > 1e8) {
-        res = vec3(0.0);
-    }
-    return res;
-}
+#endif

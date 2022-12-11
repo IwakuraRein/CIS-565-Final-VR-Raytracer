@@ -39,6 +39,7 @@
 #include "autogen/indirect_stage.comp.h"
 #include "autogen/denoise_direct.comp.h"
 #include "autogen/denoise_indirect.comp.h"
+#include "autogen/compose.comp.h"
 
 VkPipeline createComputePipeline(VkDevice device, VkComputePipelineCreateInfo createInfo, const uint32_t* shader, size_t bytes) {
 	VkPipeline pipeline;
@@ -73,17 +74,20 @@ void Renderer::destroy()
 	vkDestroyDescriptorPool(m_device, m_descPool, nullptr);
 	vkDestroyDescriptorSetLayout(m_device, m_descSetLayout, nullptr);
 
-	vkDestroyPipeline(m_device, m_directPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_directGenPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_directReusePipeline, nullptr);
-	vkDestroyPipeline(m_device, m_indirectPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_denoiseDirectPipeline, nullptr);
-	vkDestroyPipeline(m_device, m_denoiseIndirectPipeline, nullptr);
-	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+	auto destroyPipeline = [&](VkPipeline& pipeline) {
+		vkDestroyPipeline(m_device, pipeline, nullptr);
+		pipeline = VK_NULL_HANDLE;
+	};
 
-	m_pipelineLayout = VK_NULL_HANDLE;
-	m_directPipeline = VK_NULL_HANDLE;
-	m_indirectPipeline = VK_NULL_HANDLE;
+	destroyPipeline(m_directPipeline);
+	destroyPipeline(m_directGenPipeline);
+	destroyPipeline(m_directReusePipeline);
+	destroyPipeline(m_indirectPipeline);
+	destroyPipeline(m_denoiseDirectPipeline);
+	destroyPipeline(m_denoiseIndirectPipeline);
+	destroyPipeline(m_composePipeline);
+
+	vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -136,6 +140,9 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 	m_denoiseIndirectPipeline = createComputePipeline(m_device, createInfo, denoise_indirect_comp, sizeof(denoise_indirect_comp));
 	m_debug.setObjectName(m_denoiseIndirectPipeline, "Denoise Indirect");
 
+	m_composePipeline = createComputePipeline(m_device, createInfo, compose_comp, sizeof(compose_comp));
+	m_debug.setObjectName(m_composePipeline, "Compose");
+
 	timer.print();
 }
 
@@ -143,7 +150,6 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 //--------------------------------------------------------------------------------------------------
 // Executing the Ray Query compute shader
 //
-#define GROUP_SIZE 8  // Same group size as in compute shader 
 void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames)
 {
 	RtxState cState = state;
@@ -155,35 +161,45 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	// Sending the push constant information
 	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &state);
 
-	/*
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
-	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
-	*/
+	vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], RayTraceBlockSizeX), CEIL_DIV(state.size[1], RayTraceBlockSizeY), 1);
 
+	/*
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directGenPipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directReusePipeline);
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+	*/
 
 	ivec2 indSize = state.size / 2;
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
-	vkCmdDispatch(cmdBuf, (indSize[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (indSize[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+	vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], RayTraceBlockSizeX), CEIL_DIV(indSize[1], RayTraceBlockSizeY), 1);
 
+	if (state.denoise != 0) {
+		for (int i = 0; i < 4; i++) {
+			cState.denoiseLevel = i;
+			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
+			vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseDirectPipeline);
+			vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], DenoiseBlockSizeX), CEIL_DIV(state.size[1], DenoiseBlockSizeY), 1);
+		}
+	}
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseIndirectPipeline);
+#if !DENOISER_INDIRECT_BILATERAL
+	const int IndirectDenoiseNum = 5;
+	ivec2 indDenoiseSize = indSize;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < IndirectDenoiseNum; i++) {
 		cState.denoiseLevel = i;
 		vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
-		vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseDirectPipeline);
-		vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
+		vkCmdDispatch(cmdBuf, CEIL_DIV(indDenoiseSize[0], DenoiseBlockSizeX), CEIL_DIV(indDenoiseSize[1], DenoiseBlockSizeY), 1);
 	}
-
-	for (int i = 0; i < 6; i++) {
-		cState.denoiseLevel = i;
-		vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
-		vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseIndirectPipeline);
-		vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
-	}
+#else
+	ivec2 indDenoiseSize = indSize;
+	vkCmdDispatch(cmdBuf, CEIL_DIV(indDenoiseSize[0], DenoiseBlockSizeX), CEIL_DIV(indDenoiseSize[1], DenoiseBlockSizeY), 1);
+#endif
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_composePipeline);
+	vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], ComposeBlockSizeX), CEIL_DIV(state.size[1], ComposeBlockSizeY), 1);
 }
 
 // handle window resize

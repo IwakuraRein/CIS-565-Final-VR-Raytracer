@@ -32,22 +32,7 @@ ivec2 imageCoords;
 
 #define FIREFLIES 1
 
-#ifndef SWIZZLED
-layout(local_size_x = 8, local_size_y = 8) in;
-#else
-layout(local_size_x = 32, local_size_y = 2) in;
-#extension GL_EXT_shader_8bit_storage : enable  // Using uint_8 ...
-ivec2 SampleSizzled() {
-  // Sampling Swizzling
-  // Convert 32x2 to 8x8, where the sampling will follow how invocation are done in a subgroup.
-  // layout(local_size_x = 32, local_size_y = 2) in;
-  ivec2 base = ivec2(gl_WorkGroupID.xy) * 8;
-  ivec2 subset = ivec2(int(gl_LocalInvocationID.x) & 1, int(gl_LocalInvocationID.x) / 2);
-  subset += gl_LocalInvocationID.x >= 16 ? ivec2(2, -8) : ivec2(0, 0);
-  subset += ivec2(gl_LocalInvocationID.y * 4, 0);
-  return base + subset;
-}
-#endif
+layout(local_size_x = RayTraceBlockSizeX, local_size_y = RayTraceBlockSizeY) in;
 
 uvec4 encodeGeometryInfo(State state, float depth) {
     uvec4 gInfo;
@@ -279,13 +264,14 @@ vec3 ReSTIRDirect(Ray r) {
     if (isnan(direct.x) || isnan(direct.y) || isnan(direct.z)) {
         direct = vec3(0.0);
     }
-    return HDRToLDR(clampRadiance(state.mat.emission + direct));
-    return state.mat.emission + direct;
+    vec3 res = clampRadiance(state.mat.emission + direct);
+    res = HDRToLDR(res);
+    return res;
 }
 
 void main() {
   ivec2 imageRes = rtxState.size;
-  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
+  imageCoords = ivec2(gl_GlobalInvocationID.xy);
   if (imageCoords.x >= imageRes.x || imageCoords.y >= imageRes.y) {
     return;
   }
@@ -293,7 +279,6 @@ void main() {
   prd.seed = tea(rtxState.size.x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
   Ray ray = raySpawn(imageCoords, ivec2(imageRes));
 
-  //vec3 radiance = DirectSample(ray);
   vec3 radiance = ReSTIRDirect(ray);
   vec3 pixelColor = clampRadiance(radiance);
 

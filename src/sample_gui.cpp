@@ -174,9 +174,6 @@ bool SampleGUI::guiRayTracing()
 		return changed;
 		});
 	GuiH::Group<bool>("Indirect Light", true, [&] {
-		//changed |= GuiH::Slider("Sample Rate",
-		//	"Samples per pixel",
-		//	&rtxState.spp, nullptr, Normal, 0, 16);
 		changed |= GuiH::Slider("Max Ray Depth", "Maximum bounce number", &rtxState.maxDepth, nullptr, Normal, 1, 16);
 
 		bool mis = rtxState.MIS;
@@ -197,6 +194,11 @@ bool SampleGUI::guiRayTracing()
 		changed |= GuiH::Slider("Sigma Normal", "", &rtxState.sigNormalIndirect, nullptr, Normal, 1e-3f, 100.f);
 		changed |= GuiH::Slider("Sigma Depth", "", &rtxState.sigDepthIndirect, nullptr, Normal, 1e-3f, 100.f);
 		rtxState.denoise = denoise;
+
+		ImGui::Text("");
+		bool modulate = rtxState.modulate;
+		changed |= GuiH::Checkbox("Modulate", "", &modulate);
+		rtxState.modulate = modulate;
 		return changed;
 	});
 

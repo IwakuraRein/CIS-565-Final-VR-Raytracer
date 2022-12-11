@@ -154,7 +154,7 @@ public:
 	RtxState m_rtxState{
 		0,       // frame;
 		4,       // maxDepth;
-		1,       // camera change
+		1,       // modulate
 		1,       // fireflyClampThreshold;
 
 		1,       // hdrMultiplier;
@@ -178,7 +178,7 @@ public:
 		true,    // denoiser params
 
 		4.f,
-		1.f,
+		0.4f,
 		1.f,
 		0
 	};

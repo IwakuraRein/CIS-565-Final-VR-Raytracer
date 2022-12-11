@@ -24,6 +24,20 @@
 #ifndef COMMON_HOST_DEVICE
 #define COMMON_HOST_DEVICE
 
+#define INDIRECT_PRE_UPSCALE 0
+#define DENOISER_INDIRECT_BILATERAL 0
+
+const int RayTraceBlockSizeX = 8;
+const int RayTraceBlockSizeY = 8;
+
+const int DenoiseBlockSizeX = 8;
+const int DenoiseBlockSizeY = 8;
+
+const int ComposeBlockSizeX = 8;
+const int ComposeBlockSizeY = 8;
+
+#define CEIL_DIV(x, y) (x + y - 1) / y
+
 #ifdef __cplusplus
 #include <stdint.h>
 #include "nvmath/nvmath.h"
@@ -191,7 +205,7 @@ struct RtxState
 {
 	int frame;	  // Current frame, start at 0
 	int maxDepth; // How deep the path is
-	int camChanged;
+	int modulate;
 	float fireflyClampThreshold; // to cut fireflies
 
 	float hdrMultiplier;   // To brightening the scene

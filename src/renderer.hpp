@@ -110,6 +110,8 @@ private:
   VkPipeline m_denoiseDirectPipeline{ VK_NULL_HANDLE };
   VkPipeline m_denoiseIndirectPipeline{ VK_NULL_HANDLE };
 
+  VkPipeline m_composePipeline{ VK_NULL_HANDLE };
+
   VkExtent2D m_size{};
   int m_frameInd = 0;
 };
