@@ -25,7 +25,8 @@
 #define COMMON_HOST_DEVICE
 
 #define INDIRECT_PRE_UPSCALE 0
-#define DENOISER_INDIRECT_BILATERAL 1
+#define DENOISER_DIRECT_BILATERAL 0
+#define DENOISER_INDIRECT_BILATERAL 0
 
 const int RayTraceBlockSizeX = 8;
 const int RayTraceBlockSizeY = 8;

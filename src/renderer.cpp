@@ -171,24 +171,27 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 	*/
 
-	if (state.denoise > 0) {
-		for (int i = 0; i < 4; i++) {
-			cState.denoiseLevel = i;
-			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
-			vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseDirectPipeline);
-			vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], DenoiseBlockSizeX), CEIL_DIV(state.size[1], DenoiseBlockSizeY), 1);
-		}
-	}
-
 	ivec2 indSize = state.size / 2;
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
 	vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], RayTraceBlockSizeX), CEIL_DIV(indSize[1], RayTraceBlockSizeY), 1);
 
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseDirectPipeline);
+	if (state.denoise > 0) {
+#if !DENOISER_DIRECT_BILATERAL
+		for (int i = 0; i < 4; i++) {
+			cState.denoiseLevel = i;
+			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
+			vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], DenoiseBlockSizeX), CEIL_DIV(state.size[1], DenoiseBlockSizeY), 1);
+		}
+#else
+	vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], DenoiseBlockSizeX), CEIL_DIV(state.size[1], DenoiseBlockSizeY), 1);
+#endif
+	}
+
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseIndirectPipeline);
 	if (state.denoise > 0) {
 #if !DENOISER_INDIRECT_BILATERAL
-		const int IndirectDenoiseNum = 5;
-		for (int i = 0; i < IndirectDenoiseNum; i++) {
+		for (int i = 0; i < 5; i++) {
 			cState.denoiseLevel = i;
 			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
 			vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], DenoiseBlockSizeX), CEIL_DIV(indSize[1], DenoiseBlockSizeY), 1);
@@ -197,6 +200,7 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 		vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], DenoiseBlockSizeX), CEIL_DIV(indSize[1], DenoiseBlockSizeY), 1);
 #endif
 	}
+
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_composePipeline);
 	vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], ComposeBlockSizeX), CEIL_DIV(state.size[1], ComposeBlockSizeY), 1);
 }

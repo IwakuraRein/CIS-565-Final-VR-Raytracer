@@ -30,7 +30,6 @@ void main() {
         vec4 indirect = (rtxState.denoise > 0) ? imageLoad(denoiseIndTempB, coord / 2) :
             imageLoad(denoiseIndTempA, coord / 2);
         imageStore(thisIndirectResultImage, coord, indirect);
-        return;
     }
     else {
         vec3 albedo = unpackUnorm4x8(imageLoad(thisGbuffer, coord).w).rgb;

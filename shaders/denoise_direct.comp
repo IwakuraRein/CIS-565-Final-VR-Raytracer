@@ -70,15 +70,85 @@ vec3 waveletFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHa
     return res;
 }
 
+#if DENOISER_DIRECT_BILATERAL
+const int Radius = 4;
+
+shared vec3 sharedColor[DenoiseBlockSizeX + Radius * 2][DenoiseBlockSizeY + Radius * 2];
+
+vec3 bilateralFilter(image2D inImage, ivec2 coord, vec3 norm, vec3 pos, uint matHash,
+    float sigLumin, float sigNormal, float sigDepth
+) {
+    if (matHash == InvalidMatId) {
+        //return vec3(0.0);
+    }
+    vec3 sum = vec3(0.0);
+    float sumWeight = 0.0;
+
+    vec3 color = imageLoad(inImage, coord).rgb;
+
+    ivec2 localId = ivec2(gl_LocalInvocationID.xy);
+    ivec2 globalId = ivec2(gl_GlobalInvocationID.xy);
+
+    sharedColor[localId.x][localId.y] = imageLoad(inImage, globalId).rgb;
+
+    for (int j = -Radius; j <= Radius; j++) {
+        for (int i = -Radius; i <= Radius; i++) {
+            ivec2 q = coord + ivec2(i, j);
+            if (q.x >= rtxState.size.x || q.y >= rtxState.size.y ||
+                q.x < 0 || q.y < 0) {
+                continue;
+            }
+
+            vec3 normQ; vec3 posQ; uint matHashQ;
+            loadThisGeometry(q, normQ, posQ, matHashQ, rtxState.size);
+            vec3 colorQ = imageLoad(inImage, q).rgb;
+
+            if (matHash != matHashQ || matHashQ == InvalidMatId) {
+                continue;
+            }
+
+            float var = sigLumin;
+            //float distColor = abs(luminance(color) - luminance(colorQ));
+            float distColor = dot(color - colorQ, color - colorQ);
+            float wColor = exp(-distColor / var) + 1e-2;
+            //float wColor = exp(-distColor / rtxState.sigLumin) + 1e-3;
+
+            float distNorm2 = dot(norm - normQ, norm - normQ);
+            float wNorm = min(1.0, exp(-distNorm2 / sigNormal));
+
+            float distPos2 = dot(pos - posQ, pos - posQ);
+            float wDepth = exp(-distPos2 / sigDepth) + 1e-2;
+
+            float dist2 = float(i * i + j * j);
+            float wDist = exp(-dist2 / 10) + 1e-2;
+
+            float weight = wColor * wNorm * wDepth * wDist;
+            sum += colorQ * weight;
+            sumWeight += weight;
+        }
+    }
+    vec3 res = (sumWeight < 1e-5) ? vec3(0.0) : sum / sumWeight;
+    if (hasNan(res) || res.x < 0 || res.y < 0 || res.z < 0 ||
+        res.x > 1e8 || res.y > 1e8 || res.z > 1e8) {
+        res = vec3(0.0);
+    }
+    return res;
+}
+#endif
+
 void main() {
 	ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
     if (!inBound(coord, rtxState.size)) {
         return;
     }
-
     vec3 albedo; vec3 norm; vec3 pos; uint matHash;
     loadThisGeometry(coord, albedo, norm, pos, matHash, rtxState.size);
     
+#if DENOISER_DIRECT_BILATERAL
+    {
+        vec3 res = bilateralFilter(denoiseDirTempA, coord, norm, pos, matHash,
+            rtxState.sigLuminDirect, rtxState.sigNormalDirect, rtxState.sigDepthDirect);
+#else
     if (rtxState.denoiseLevel == 0) {
         vec3 res = waveletFilter(thisDirectResultImage, coord, norm, pos, matHash,
             rtxState.sigLuminDirect, rtxState.sigNormalDirect, rtxState.sigDepthDirect, 0);
@@ -97,6 +167,7 @@ void main() {
     else if (rtxState.denoiseLevel == 3) {
         vec3 res = waveletFilter(denoiseDirTempA, coord, norm, pos, matHash,
             rtxState.sigLuminDirect, rtxState.sigNormalDirect, rtxState.sigDepthDirect, 3);
+#endif
         res = LDRToHDR(res);
         imageStore(thisDirectResultImage, coord, vec4(res, 1.0));
     }

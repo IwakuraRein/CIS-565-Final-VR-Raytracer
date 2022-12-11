@@ -268,7 +268,7 @@ vec3 ReSTIRDirect(Ray r) {
     res = HDRToLDR(res);
     return res;
 }
-
+ 
 void main() {
   ivec2 imageRes = rtxState.size;
   imageCoords = ivec2(gl_GlobalInvocationID.xy);
@@ -281,17 +281,9 @@ void main() {
 
   vec3 radiance = ReSTIRDirect(ray);
   vec3 pixelColor = clampRadiance(radiance);
-
-  if(rtxState.frame > 0) {
-    vec3 old_color = imageLoad(lastDirectResultImage, imageCoords).xyz;
-    vec3 new_result = mix(old_color, pixelColor, 1.0f / float(rtxState.frame + 1));
-    if (rtxState.accumulate != 0) {
-      imageStore(thisDirectResultImage, imageCoords, vec4(new_result, 1));
-    }
-    else {
-      imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1.0));
-    }
-  } else {
-    imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));
-  }
+#if DENOISER_DIRECT_BILATERAL
+  imageStore(denoiseDirTempA, imageCoords, vec4(pixelColor, 1));
+#else
+  imageStore(thisDirectResultImage, imageCoords, vec4(pixelColor, 1));
+#endif
 }
