@@ -76,7 +76,6 @@ bool findTemporalNeighbor(
 ) {
     vec3 pnorm; float pdepth; uint matHash;
     
-    /*
     loadLastGeometryInfo(lastCoord, pnorm, pdepth, matHash);
     ivec2 coord = lastCoord / 2;
     
@@ -88,8 +87,7 @@ bool findTemporalNeighbor(
             }
         }
     }
-    */
-
+    /*
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 2; j++) {
             ivec2 coord = (lastCoord + ivec2(i, j)) / 2;
@@ -103,24 +101,6 @@ bool findTemporalNeighbor(
                     }
                 }
             }
-        }
-    }
-    /*
-    for (int j = -1; j <= 1; j++) {
-        for (int i = -1; i <= 1; i++) {
-            ivec2 coord = ivec2(lastCoord.x + i, lastCoord.y + j);
-            loadLastGeometryInfo(coord * 2, pnorm, pdepth, matHash);
-
-            if (!inBound(coord, indSize())) {
-                continue;
-            }
-            else if (hash8bit(matId) != matHash)
-                continue;
-            else if (dot(norm, pnorm) < 0.1 || reprojDepth > pdepth * 1.05) {
-                continue;
-            }
-            resv = lastIndirectResv[coord.y * indSize().x + coord.x];
-            return true;
         }
     }
     */
@@ -288,9 +268,8 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
 }
 
 void main() {
-  imageCoords = ivec2(gl_GlobalInvocationID.xy);  //SampleSizzled();
-  ivec2 imageRes = indSize();
-  if (imageCoords.x >= imageRes.x || imageCoords.y >= imageRes.y) {
+  imageCoords = ivec2(gl_GlobalInvocationID.xy);
+  if (!inBound(imageCoords, indSize())) {
     return;
   }
   ivec2 p00 = imageCoords * 2 + ivec2(0, 0);
@@ -299,7 +278,7 @@ void main() {
   ivec2 p01 = imageCoords * 2 + ivec2(0, 1);
 
   prd.seed = tea(indSize().x * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x, rtxState.time);
-  Ray ray = raySpawn(imageCoords, imageRes);
+  Ray ray = raySpawn(imageCoords, indSize());
 
 #if TILED_MULTIBOUNCE
   if (gl_LocalInvocationIndex == 0) {
@@ -311,7 +290,7 @@ void main() {
   State state;
   float depth;
   if (!getIndirectStateFromGBuffer(thisGbuffer, ray, state, depth)) {
-    imageStore(thisIndirectResultImage, imageCoords, vec4(0.0));
+    imageStore(denoiseIndTempA, imageCoords, vec4(0.0));
     return;
   }
 #if FETCH_GEOM_CHECK_4_SUBPIXELS
@@ -319,7 +298,6 @@ void main() {
 #else
   state.position += state.ffnormal * 2e-2;
 #endif
-
   float primSamplePdf; vec3 primWo; State primState; GISample giSample;
 
   pathTraceIndirect(state, ray, primSamplePdf, primWo, primState, giSample);
@@ -327,5 +305,5 @@ void main() {
 
   pixelColor = clampRadiance(pixelColor);
   vec4 c00 = vec4(pixelColor, 1.0);
-  imageStore(thisIndirectResultImage, imageCoords, c00);
+  imageStore(denoiseIndTempA, imageCoords, c00);
 }

@@ -119,28 +119,36 @@ void main() {
   else {
     // Raw result of ray tracing
     vec4 hdr;
-    if(debugging_mode == eDirectStage)
+    if(debugging_mode == eDirectStage) {
       hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba;
-    else if(debugging_mode == eIndirectStage)
+    }
+    else if(debugging_mode == eIndirectStage) {
       hdr = texture(inIndirectImage, indCoord * tm.zoom).rgba;
-    else
+    }
+    else {
       hdr = texture(inDirectImage, uvCoords * tm.zoom).rgba + texture(inIndirectImage, indCoord * tm.zoom).rgba;
+    }
 
     hdr.w = 1.0;
     if(((tm.autoExposure >> 0) & 1) == 1) {
       vec4 avg; // Get the average value of the image
-      if(debugging_mode == eDirectStage)
+      if(debugging_mode == eDirectStage) {
         avg = textureLod(inDirectImage, vec2(0.5), 20);
-      else if(debugging_mode == eIndirectStage)
+      }
+      else if(debugging_mode == eIndirectStage) {
         avg = textureLod(inIndirectImage, vec2(0.5), 20);
-      else
+      }
+      else {
         avg = (textureLod(inDirectImage, vec2(0.5), 20) + textureLod(inIndirectImage, vec2(0.5), 20));
+      }
       avg.w = 1.0;
       float avgLum2 = luminance(avg.rgb);                  // Find the luminance
-      if(((tm.autoExposure >> 1) & 1) == 1)
+      if(((tm.autoExposure >> 1) & 1) == 1) {
         hdr.rgb = toneLocalExposure(hdr.rgb, avgLum2);  // Adjust exposure
-      else
+      }
+      else {
         hdr.rgb = toneExposure(hdr.rgb, avgLum2);  // Adjust exposure
+      }
     }
 
     // Tonemap + Linear to sRgb

@@ -74,7 +74,7 @@ private:
 
   //std::array<nvvk::Buffer, 2> m_buffer;
   std::array<nvvk::Texture, 2> m_gbuffer;
-  std::array<nvvk::Texture, 2> m_denoiseTempBuf;
+  std::array<nvvk::Texture, 4> m_denoiseTempBuf;
 
   std::array<nvvk::Buffer, 2> m_directReservoir;
   std::array<nvvk::Buffer, 2> m_indirectReservoir;

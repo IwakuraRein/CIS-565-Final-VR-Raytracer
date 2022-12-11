@@ -66,6 +66,7 @@ void Renderer::destroy()
 		m_pAlloc->destroy(m_directReservoir[i]);
 		m_pAlloc->destroy(m_indirectReservoir[i]);
 		m_pAlloc->destroy(m_denoiseTempBuf[i]);
+		m_pAlloc->destroy(m_denoiseTempBuf[i + 2]);
 	}
 	m_pAlloc->destroy(m_directTempResv);
 	m_pAlloc->destroy(m_indirectTempResv);
@@ -153,12 +154,10 @@ void Renderer::create(const VkExtent2D& size, std::vector<VkDescriptorSetLayout>
 void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::ProfilerVK& profiler, std::vector<VkDescriptorSet> descSets, int frames)
 {
 	RtxState cState = state;
-	// Preparing for the compute shader
 	descSets.push_back(m_descSet[(frames + 1) % 2]);
 	vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0,
 		static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
-	// Sending the push constant information
 	vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &state);
 
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_directPipeline);
@@ -172,11 +171,7 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 	vkCmdDispatch(cmdBuf, (state.size[0] + (GROUP_SIZE - 1)) / GROUP_SIZE, (state.size[1] + (GROUP_SIZE - 1)) / GROUP_SIZE, 1);
 	*/
 
-	ivec2 indSize = state.size / 2;
-	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
-	vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], RayTraceBlockSizeX), CEIL_DIV(indSize[1], RayTraceBlockSizeY), 1);
-
-	if (state.denoise != 0) {
+	if (state.denoise > 0) {
 		for (int i = 0; i < 4; i++) {
 			cState.denoiseLevel = i;
 			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
@@ -184,20 +179,24 @@ void Renderer::run(const VkCommandBuffer& cmdBuf, const RtxState& state, nvvk::P
 			vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], DenoiseBlockSizeX), CEIL_DIV(state.size[1], DenoiseBlockSizeY), 1);
 		}
 	}
-	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseIndirectPipeline);
-#if !DENOISER_INDIRECT_BILATERAL
-	const int IndirectDenoiseNum = 5;
-	ivec2 indDenoiseSize = indSize;
 
-	for (int i = 0; i < IndirectDenoiseNum; i++) {
-		cState.denoiseLevel = i;
-		vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
-		vkCmdDispatch(cmdBuf, CEIL_DIV(indDenoiseSize[0], DenoiseBlockSizeX), CEIL_DIV(indDenoiseSize[1], DenoiseBlockSizeY), 1);
-	}
+	ivec2 indSize = state.size / 2;
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_indirectPipeline);
+	vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], RayTraceBlockSizeX), CEIL_DIV(indSize[1], RayTraceBlockSizeY), 1);
+
+	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_denoiseIndirectPipeline);
+	if (state.denoise > 0) {
+#if !DENOISER_INDIRECT_BILATERAL
+		const int IndirectDenoiseNum = 5;
+		for (int i = 0; i < IndirectDenoiseNum; i++) {
+			cState.denoiseLevel = i;
+			vkCmdPushConstants(cmdBuf, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RtxState), &cState);
+			vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], DenoiseBlockSizeX), CEIL_DIV(indSize[1], DenoiseBlockSizeY), 1);
+		}
 #else
-	ivec2 indDenoiseSize = indSize;
-	vkCmdDispatch(cmdBuf, CEIL_DIV(indDenoiseSize[0], DenoiseBlockSizeX), CEIL_DIV(indDenoiseSize[1], DenoiseBlockSizeY), 1);
+		vkCmdDispatch(cmdBuf, CEIL_DIV(indSize[0], DenoiseBlockSizeX), CEIL_DIV(indSize[1], DenoiseBlockSizeY), 1);
 #endif
+	}
 	vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, m_composePipeline);
 	vkCmdDispatch(cmdBuf, CEIL_DIV(state.size[0], ComposeBlockSizeX), CEIL_DIV(state.size[1], ComposeBlockSizeY), 1);
 }
@@ -210,6 +209,7 @@ void Renderer::update(const VkExtent2D& size) {
 		m_pAlloc->destroy(m_directReservoir[i]);
 		m_pAlloc->destroy(m_indirectReservoir[i]);
 		m_pAlloc->destroy(m_denoiseTempBuf[i]);
+		m_pAlloc->destroy(m_denoiseTempBuf[i + 2]);
 	}
 	m_pAlloc->destroy(m_directTempResv);
 	m_pAlloc->destroy(m_indirectTempResv);
@@ -262,15 +262,23 @@ void Renderer::createImage()
 
 		auto denoiseBufInfo = nvvk::makeImage2DCreateInfo(m_size, m_denoiseTempFormat,
 			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false);
-		nvvk::Image denoiseImage1 = m_pAlloc->createImage(denoiseBufInfo);
-		nvvk::Image denoiseImage2 = m_pAlloc->createImage(denoiseBufInfo);
-		VkImageViewCreateInfo divInfo1 = nvvk::makeImageViewCreateInfo(denoiseImage1.image, denoiseBufInfo);
-		VkImageViewCreateInfo divInfo2 = nvvk::makeImageViewCreateInfo(denoiseImage2.image, denoiseBufInfo);
+		nvvk::Image denoiseDirImageA = m_pAlloc->createImage(denoiseBufInfo);
+		nvvk::Image denoiseDirImageB = m_pAlloc->createImage(denoiseBufInfo);
+		nvvk::Image denoiseDirImageC = m_pAlloc->createImage(denoiseBufInfo);
+		nvvk::Image denoiseDirImageD = m_pAlloc->createImage(denoiseBufInfo);
+		VkImageViewCreateInfo divInfo1 = nvvk::makeImageViewCreateInfo(denoiseDirImageA.image, denoiseBufInfo);
+		VkImageViewCreateInfo divInfo2 = nvvk::makeImageViewCreateInfo(denoiseDirImageB.image, denoiseBufInfo);
+		VkImageViewCreateInfo divInfo3 = nvvk::makeImageViewCreateInfo(denoiseDirImageC.image, denoiseBufInfo);
+		VkImageViewCreateInfo divInfo4 = nvvk::makeImageViewCreateInfo(denoiseDirImageD.image, denoiseBufInfo);
 
-		m_denoiseTempBuf[0] = m_pAlloc->createTexture(denoiseImage1, divInfo1);
-		m_denoiseTempBuf[1] = m_pAlloc->createTexture(denoiseImage2, divInfo2);
+		m_denoiseTempBuf[0] = m_pAlloc->createTexture(denoiseDirImageA, divInfo1);
+		m_denoiseTempBuf[1] = m_pAlloc->createTexture(denoiseDirImageB, divInfo2);
+		m_denoiseTempBuf[2] = m_pAlloc->createTexture(denoiseDirImageC, divInfo3);
+		m_denoiseTempBuf[3] = m_pAlloc->createTexture(denoiseDirImageD, divInfo4);
 		m_denoiseTempBuf[0].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		m_denoiseTempBuf[1].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		m_denoiseTempBuf[2].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		m_denoiseTempBuf[3].descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	}
 
 	// Setting the image layout for both color and depth
@@ -282,6 +290,8 @@ void Renderer::createImage()
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_motionVector.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_denoiseTempBuf[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		nvvk::cmdBarrierImageLayout(cmdBuf, m_denoiseTempBuf[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		nvvk::cmdBarrierImageLayout(cmdBuf, m_denoiseTempBuf[2].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		nvvk::cmdBarrierImageLayout(cmdBuf, m_denoiseTempBuf[3].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		genCmdBuf.submitAndWait(cmdBuf);
 	}
@@ -311,8 +321,10 @@ void Renderer::createDescriptorSet()
 
 	m_bind.addBinding({ RayQBindings::eMotionVector, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 
-	m_bind.addBinding({ RayQBindings::eDenoiseTempA, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
-	m_bind.addBinding({ RayQBindings::eDenoiseTempB, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eDenoiseDirTempA, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eDenoiseDirTempB, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eDenoiseIndTempA, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
+	m_bind.addBinding({ RayQBindings::eDenoiseIndTempB, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, flag });
 
 	m_descPool = m_bind.createPool(m_device, m_descSet.size());
 	CREATE_NAMED_VK(m_descSetLayout, m_bind.createLayout(m_device));
@@ -323,7 +335,7 @@ void Renderer::createDescriptorSet()
 }
 
 void Renderer::updateDescriptorSet() {
-	std::array<VkWriteDescriptorSet, 11> writes;
+	std::array<VkWriteDescriptorSet, 13> writes;
 	VkDeviceSize directResvSize = m_size.width * m_size.height * sizeof(DirectReservoir);
 	VkDeviceSize indirectResvSize = (m_size.width / 2) * (m_size.height / 2) * sizeof(IndirectReservoir);
 
@@ -349,8 +361,10 @@ void Renderer::updateDescriptorSet() {
 
 		writes[8] = m_bind.makeWrite(m_descSet[i], RayQBindings::eMotionVector, &m_motionVector.descriptor);
 
-		writes[9] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseTempA, &m_denoiseTempBuf[0].descriptor);
-		writes[10] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseTempB, &m_denoiseTempBuf[1].descriptor);
+		writes[9] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseDirTempA, &m_denoiseTempBuf[0].descriptor);
+		writes[10] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseDirTempB, &m_denoiseTempBuf[1].descriptor);
+		writes[11] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseIndTempA, &m_denoiseTempBuf[2].descriptor);
+		writes[12] = m_bind.makeWrite(m_descSet[i], RayQBindings::eDenoiseIndTempB, &m_denoiseTempBuf[3].descriptor);
 
 		vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 	}

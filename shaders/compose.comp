@@ -25,16 +25,18 @@ void main() {
     if (coord.x >= rtxState.size.x || coord.y >= rtxState.size.y) {
         return;
     }
-
+    
     if (rtxState.modulate == 0) {
-        vec4 indirect = imageLoad(denoiseTempA, coord / 2);
+        vec4 indirect = (rtxState.denoise > 0) ? imageLoad(denoiseIndTempB, coord / 2) :
+            imageLoad(denoiseIndTempA, coord / 2);
         imageStore(thisIndirectResultImage, coord, indirect);
         return;
     }
     else {
         vec3 albedo = unpackUnorm4x8(imageLoad(thisGbuffer, coord).w).rgb;
         vec3 direct = imageLoad(thisDirectResultImage, coord).rgb * albedo;
-        vec3 indirect = imageLoad(denoiseTempA, coord / 2).rgb * albedo;
+        vec3 indirect = ((rtxState.denoise > 0) ? imageLoad(denoiseIndTempB, coord / 2) :
+            imageLoad(denoiseIndTempA, coord / 2)).rgb * albedo;
 
         imageStore(thisDirectResultImage, coord, vec4(direct, 1.0));
         imageStore(thisIndirectResultImage, coord, vec4(indirect, 1.0));

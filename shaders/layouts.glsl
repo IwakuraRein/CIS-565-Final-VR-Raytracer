@@ -66,8 +66,10 @@ layout(set = S_RAYQ, binding = eLastIndirectResv, scalar) buffer _LastIndirectRe
 layout(set = S_RAYQ, binding = eThisIndirectResv, scalar) buffer _ThisIndirectResv { IndirectReservoir thisIndirectResv[]; };
 layout(set = S_RAYQ, binding = eTempIndirectResv, scalar) buffer _TempIndirectResv { IndirectReservoir tempIndirectResv[]; };
 
-layout(set = S_RAYQ, binding = eDenoiseTempA) uniform image2D denoiseTempA;
-layout(set = S_RAYQ, binding = eDenoiseTempB) uniform image2D denoiseTempB;
+layout(set = S_RAYQ, binding = eDenoiseDirTempA) uniform image2D denoiseDirTempA;
+layout(set = S_RAYQ, binding = eDenoiseDirTempB) uniform image2D denoiseDirTempB;
+layout(set = S_RAYQ, binding = eDenoiseIndTempA) uniform image2D denoiseIndTempA;
+layout(set = S_RAYQ, binding = eDenoiseIndTempB) uniform image2D denoiseIndTempB;
 
 layout(buffer_reference, scalar) buffer Vertices { VertexAttributes v[]; };
 layout(buffer_reference, scalar) buffer Indices	 { uvec3 i[];            };

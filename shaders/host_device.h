@@ -25,7 +25,7 @@
 #define COMMON_HOST_DEVICE
 
 #define INDIRECT_PRE_UPSCALE 0
-#define DENOISER_INDIRECT_BILATERAL 0
+#define DENOISER_INDIRECT_BILATERAL 1
 
 const int RayTraceBlockSizeX = 8;
 const int RayTraceBlockSizeY = 8;
@@ -118,8 +118,10 @@ eLastIndirectResv = 5,
 eThisIndirectResv = 6,
 eTempIndirectResv = 7,
 eMotionVector = 8,
-eDenoiseTempA = 9,
-eDenoiseTempB = 10
+eDenoiseDirTempA = 9,
+eDenoiseDirTempB = 10,
+eDenoiseIndTempA = 11,
+eDenoiseIndTempB = 12
 END_ENUM();
 
 START_ENUM(DebugMode)
