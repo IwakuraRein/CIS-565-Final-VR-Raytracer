@@ -37,41 +37,13 @@ This is the our final project for UPenn's CIS 565 GPU Architecture and Programmi
 
 - [*Milestone 3*](https://docs.google.com/presentation/d/1k-_qs0nqGj4rSUricp6cji-UP6j1BwNGTwsvqKBcDtw/edit?usp=sharing)
 
-<<<<<<< Updated upstream
 - [*Final Presentation*](https://docs.google.com/presentation/d/1rSwCd7MCO36SrICvODRKI74MOzRdcEi5Na1zm8pdN8A/edit?usp=sharing)
 
-## Introduction
-
-This is a real-time path tracer based on Vulkan RT and ReSTIR mothods. 
-
-## Pipeline
-
-### Overview
-
-<div align="center">
-    <img src="./images/pipeline_overview.png" width="80%" />
-</div>
-<h4>Direct illumination</h4>
-<div align="center">
-    <img src="./images/pipeline_direct.png" width="80%" />
-</div>
-<h4>Indirect illumination</h4>
-<div align="center">
-    <img src="./images/pipeline_indirect.png" width="80%" />
-</div>
-=======
-<<<<<<< HEAD
-### Pipeline Overview
-=======
-- [*Final Presentation*](https://docs.google.com/presentation/d/1rSwCd7MCO36SrICvODRKI74MOzRdcEi5Na1zm8pdN8A/edit?usp=sharing)
->>>>>>> Stashed changes
-
-## Introduction
->>>>>>> c683d59ec1a526f35d9ee3981fe3953a4c7b8eae
+## Pipeline Overview
 
 ![](././images/pipeline_overview.png)
 
-Our ray tracing pipeline can be divided to three main stages: direct stage, indirect stage and denoiser stage. In direct stage, the render generates G-Buffer, reservoirs for direct illumination and perform direct ReSTIR. In the second stage, we do path tracing to collect new indirect samples and 
+Our ray tracing pipeline can be divided to three main stages: direct stage, indirect stage and denoiser stage. In direct stage, the render generates G-Buffer, reservoirs for direct illumination and perform direct ReSTIR. In the second stage, we do path tracing to collect new indirect samples and evaluate indirect illumination. The last stage filters the result generate by previous stages and finally compose the noise-free output.
 
 ### Direct Stage
 
