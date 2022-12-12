@@ -118,6 +118,14 @@ The direct and indirect components are filtered separately and merged after filt
 | Demodulated Input      | ![](./images/dir.jpg)   | ![](./images/ind.jpg)   | ![](./images/com.jpg)   |
 | Denoised + Remodulated | ![](./images/dir_d.jpg) | ![](./images/ind_d.jpg) | ![](./images/com_d.jpg) |
 
+
+
+|          | Demodulated Input     | Denoised + Remodulated  |
+| -------- | --------------------- | ----------------------- |
+| Direct   | ![](./images/dir.jpg) | ![](./images/dir_d.jpg) |
+| Indirect | ![](./images/ind.jpg) | ![](./images/ind_d.jpg) |
+| Combined | ![](./images/com.jpg) | ![](./images/com_d.jpg) |
+
 By the time we finished this project, we also tried bilateral filter, which only takes one pass. It turned out this filter worked well with direct illumination with faster speed but at the cost of lower quality.
 
 ## Performance
