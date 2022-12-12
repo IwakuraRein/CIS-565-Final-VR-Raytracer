@@ -29,6 +29,8 @@
 
 - [*Milestone 3*](https://docs.google.com/presentation/d/1k-_qs0nqGj4rSUricp6cji-UP6j1BwNGTwsvqKBcDtw/edit?usp=sharing)
 
+- [*Final Presentation*](https://docs.google.com/presentation/d/1rSwCd7MCO36SrICvODRKI74MOzRdcEi5Na1zm8pdN8A/edit?usp=sharing)
+
 ## Introduction
 
 This is a real-time path tracer based on Vulkan RT and ReSTIR mothods. 
