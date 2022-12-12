@@ -151,7 +151,7 @@ We tested our path tracer under 1920x1080, with indirect tracing depth = 4 for t
 
 ![](./images/render_time.jpg)
 
-From the figure, our path tracer is able to render large scene (such as Bistro Exterior, which has 900 million triangles) within 20 ms (~50 FPS), efficient within our expectation. However, the denoiser takes about 8 ms, which is still a point to optimize.
+From the figure, our path tracer is able to render large scene (such as Bistro Exterior, which has 2.83 million triangles) within 20 ms (~50 FPS), efficient within our expectation. However, the denoiser takes about 8 ms, which is still a point to optimize.
 
 ## Conclusion
 
