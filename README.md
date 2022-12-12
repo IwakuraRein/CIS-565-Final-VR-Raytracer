@@ -113,13 +113,6 @@ Just like what we did in project 4, our denoising process is logically divided i
 
 The direct and indirect components are filtered separately and merged after filtering. For direct we use a 4 level wavelet since it's already smooth. For indirect, we use a 5 level wavelet to reduce flickering. Also, in case of large radiance values that are hard to be filtered, we do tone mapping before filtering and tone map back after filtering.
 
-|                        | Direct                  | Indirect                | Combined                |
-| ---------------------- | ----------------------- | ----------------------- | ----------------------- |
-| Demodulated Input      | ![](./images/dir.jpg)   | ![](./images/ind.jpg)   | ![](./images/com.jpg)   |
-| Denoised + Remodulated | ![](./images/dir_d.jpg) | ![](./images/ind_d.jpg) | ![](./images/com_d.jpg) |
-
-
-
 |          | Demodulated Input     | Denoised + Remodulated  |
 | -------- | --------------------- | ----------------------- |
 | Direct   | ![](./images/dir.jpg) | ![](./images/dir_d.jpg) |
