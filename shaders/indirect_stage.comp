@@ -81,7 +81,7 @@ bool findTemporalNeighbor(
     
     if (inBound(coord, indSize())) {
         if (hash8bit(matId) == matHash) {
-            if (dot(norm, pnorm) > 0.9 && reprojDepth < pdepth * 1.05) {
+            if (dot(norm, pnorm) > 0.5 && reprojDepth < pdepth * 1.1) {
                 resv = lastIndirectResv[coord.y * indSize().x + coord.x];
                 return true;
             }
@@ -254,13 +254,13 @@ vec3 ReSTIRIndirect(float dist, float primSamplePdf, vec3 primWo, State primStat
     giSample = resv.giSample;
     if (!resvInvalid(resv) && GISampleValid(giSample)) {
         vec3 primWi = normalize(giSample.xs - giSample.xv);
-        /*
+        primState.mat.albedo = vec3(1.0);
+        
         indirect = giSample.L * BSDF(primState, primWo, giSample.nv, primWi) * satDot(giSample.nv, primWi) *
             bigWIndirect(resv, primState, primWo);
-            */
-        indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
-        primState.mat.albedo = vec3(1.0);
-        indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
+        
+        //indirect = giSample.L / giSample.pHat * resv.weight / float(resv.num);
+        //indirect *= BSDF(primState, primWo, giSample.nv, primWi) * absDot(giSample.nv, primWi);
     }
     vec3 res = clampRadiance(indirect);
     res = HDRToLDR(res);
