@@ -9,9 +9,17 @@
 
 **Tested on a personal laptop: i7-12700 @ 4.90GHz with 16GB RAM, RTX 3070 Ti Laptop 8GB**
 
-![](./images/bistro_ext.jpg)
+<div align="center">
+    <img src="./images/bistro_ext.jpg" width="100%" />
+    <p>Bistro Exterior</p>
+    <br>
+</div>
 
-![](./images/bistro_int.png)
+<div align="center">
+    <img src="./images/bistro_int.png" width="100%" />
+    <p>Bistro Interior</p>
+    <br>
+</div>
 
 ## Introduction
 
@@ -64,7 +72,16 @@ Compared to uncompressed layout, a total of 56 - 20 = 36 bytes is saved.
 
 #### Direct ReSTIR
 
-We implemented ReSTIR DI [[B. Bitterli et al., SIG 2020]]() for our direct illumination. However, different from the original paper, we did several modifications to make it more suitable for real-time path tracing:
+We implemented ReSTIR DI [[B. Bitterli et al., SIG 2020]]() for our direct illumination.
+
+<div align="center">
+    <img src="https://raw.githubusercontent.com/HummaWhite/hummawhite.github.io/main/img/restir_di.jpg" width="100%" />
+    <p>The effect of ReSTIR DI. From another CUDA program we developed to validate ReSTIR before we implemented it in this renderer</p>
+    <p>In our Vulkan renderer, in order to achieve real-time, we traded quality for speed</p>
+    <br>
+</div>
+
+However, different from the original paper, we did several modifications to make it more suitable for real-time path tracing:
 
 - First, we observed that, to maintain a relatively temporally stable output from ReSTIR, the number of RIS samples we sample in each ray tracing pass does not have to be very large (e.g., M = 32 in the paper). M = 4 is enough.
 - Second, for reservoir clamping, we clamped the M of valid temporally neighboring reservoir to about 80x of current ones. This helps our direct illumination to quickly adapt to updated camera perspectives while keeping stable.
