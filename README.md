@@ -14,16 +14,15 @@
     <p>Bistro Exterior</p>
     <br>
 </div>
-
-<div align="center">
-    <img src="./images/bistro_int.png" width="100%" />
-    <p>Bistro Interior</p>
-    <br>
-</div>
-
 ## Introduction
 
 This is the our final project for UPenn's CIS 565 GPU Architecture and Programming Course. Our motivation and goal is to explore the possibility of real-time global illumination majorly based on path tracing techniques. With one month of trial and effort, our renderer has been shaped into a real-time path tracer based on Vulkan RT and ReSTIR algorithms. In our renderer, we have implemented ReSTIR DI, ReSTIR GI and a denoiser.
+
+### Demo Video (Click to Watch)
+
+[![](./images/demov.png)](https://www.youtube.com/watch?v=1rBizYwi0IQ)
+
+
 
 ## Features
 
@@ -46,6 +45,12 @@ This is the our final project for UPenn's CIS 565 GPU Architecture and Programmi
 - [*Milestone 3*](https://docs.google.com/presentation/d/1k-_qs0nqGj4rSUricp6cji-UP6j1BwNGTwsvqKBcDtw/edit?usp=sharing)
 
 - [*Final Presentation*](https://docs.google.com/presentation/d/1rSwCd7MCO36SrICvODRKI74MOzRdcEi5Na1zm8pdN8A/edit?usp=sharing)
+
+<div align="center">
+    <img src="./images/bistro_int.png" width="100%" />
+    <p>Bistro Interior</p>
+    <br>
+</div>
 
 ## Foundations of ReSTIR
 
@@ -152,10 +157,6 @@ We tested our path tracer under 1920x1080, with indirect tracing depth = 4 for t
 ![](./images/render_time.jpg)
 
 From the figure, our path tracer is able to render large scene (such as Bistro Exterior, which has 2.83 million triangles) within 20 ms (~50 FPS), efficient within our expectation. However, the denoiser takes about 8 ms, which is still a point to optimize.
-
-## Conclusion
-
-
 
 ## Future Work
 
