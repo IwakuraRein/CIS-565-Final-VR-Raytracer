@@ -12,8 +12,10 @@
 <div align="center">
     <img src="./images/bistro_ext.jpg" width="100%" />
     <p>Bistro Exterior</p>
-    <br>
 </div>
+
+
+
 ## Introduction
 
 This is the our final project for UPenn's CIS 565 GPU Architecture and Programming Course. Our motivation and goal is to explore the possibility of real-time global illumination majorly based on path tracing techniques. With one month of trial and effort, our renderer has been shaped into a real-time path tracer based on Vulkan RT and ReSTIR algorithms. In our renderer, we have implemented ReSTIR DI, ReSTIR GI and a denoiser.
